@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LOG:ON | Logistics Portfolio</title>
+<style>
+:root{--navy:#102b43;--blue:#167fa9;--sky:#e8f6fc;--ink:#1c2935;--muted:#586c7c;--line:#e3e9ee;--bg:#f5f8fa}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,"Noto Sans KR",Arial,sans-serif}
+[hidden]{display:none!important}button,input,textarea,select{font:inherit}button{cursor:pointer;border:0;border-radius:10px;padding:10px 14px;font-weight:700;background:var(--navy);color:white}
+header{background:var(--navy);color:white;padding:22px max(22px,calc((100% - 1180px)/2));display:flex;align-items:center;justify-content:space-between;gap:15px}
+.brand,.user,.actions{display:flex;align-items:center;gap:10px}.logo{background:#79d0f1;color:var(--navy);border-radius:12px;padding:10px;font-weight:900;font-size:19px}.brand small{display:block;color:#bcd0de;letter-spacing:1.5px;font-size:11px;margin-top:3px}.user{font-size:14px}.ghost{background:transparent;border:1px solid #7890a3}
+main{max-width:1180px;margin:28px auto;padding:0 20px}.hero,.toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;gap:15px;flex-wrap:wrap}.eyebrow{color:var(--blue);font-size:12px;font-weight:900;letter-spacing:2px}h1{margin:6px 0;font-size:30px}h2{margin:0 0 6px;font-size:22px}.sub{color:var(--muted);font-size:14px;line-height:1.6}
+.layout{display:grid;grid-template-columns:280px minmax(0,1fr);gap:20px;align-items:start}.panel{background:white;border:1px solid var(--line);border-radius:16px;box-shadow:0 5px 20px #102b4308;padding:22px}aside h2{font-size:16px;margin-bottom:14px}.members{display:grid;gap:7px}.member{width:100%;text-align:left;background:#f7f9fb;color:var(--ink);border:1px solid transparent}.member[aria-current=true]{background:var(--sky);border-color:#9bd8f0;color:#12688d}.member small{display:block;margin-top:3px;color:var(--muted);font-weight:500}.member:disabled{cursor:default;opacity:.66}.blue{background:var(--blue)}.light{background:#edf4f7;color:#244256}.actions{flex-wrap:wrap}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}.stat{padding:15px;border:1px solid var(--line);border-radius:13px;background:#fbfdfe;font-size:14px;color:var(--muted)}.stat b{color:var(--ink);font-size:24px;display:block;margin-top:6px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.field{display:flex;flex-direction:column;gap:7px;font-size:14px;font-weight:700;color:#425565}.full{grid-column:1/-1}input,textarea,select{width:100%;border:1px solid #dce4e9;border-radius:9px;padding:11px;background:white;color:var(--ink);outline-color:var(--blue);font-size:16px;font-weight:400}textarea{min-height:95px;resize:vertical}.section{border-top:1px solid var(--line);padding-top:18px;margin-top:20px}.section h3{font-size:16px;margin:0 0 14px}.section:first-child{border:0;padding-top:0}.notice{background:#fff8e9;border:1px solid #f1dfb6;padding:12px 14px;border-radius:10px;color:#74571c;font-size:13px;line-height:1.6}
+.login{max-width:470px;margin:55px auto 25px;padding:28px}.login h1{font-size:24px}.login .field{margin:16px 0}.login button{width:100%}.pill{background:var(--sky);color:#116489;padding:6px 10px;border-radius:20px;font-size:12px;font-weight:800}.status{color:#12688d;font-size:14px}.error{color:#a3322a;font-size:14px}.tablewrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:12px 9px;border-bottom:1px solid var(--line);text-align:left}th{color:var(--muted)}progress{display:block;width:100%;min-width:70px;accent-color:var(--blue)}footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}.print-profile{display:none}
+@media(max-width:800px){.layout{grid-template-columns:1fr}.members{grid-template-columns:repeat(2,1fr)}.hero{align-items:start}header{padding:17px 20px}}
+@media(max-width:520px){.grid{grid-template-columns:1fr}.user span{display:none}.stats{grid-template-columns:1fr 1fr}.panel{padding:16px}.login{margin:30px auto}h1{font-size:26px}}
+ .admin-controls{margin:0 0 18px}.admin-controls a{color:#12688d}.admin-controls select{max-width:360px}
+@page{size:A4;margin:16mm}
+@media print{
+ header,footer,.hero,.admin-controls,.toolbar,.stats,#profileForm,#saveStatus{display:none!important}
+ body{background:white;color:black;font-size:11pt}
+ main{margin:0;padding:0}.layout{display:block}.panel{border:0;box-shadow:none;padding:0}
+ .print-profile{display:block}.print-profile h1{font-size:22pt;margin:0 0 12pt}
+ .print-profile h2{font-size:14pt;border-bottom:1px solid #a5a5a5;padding-bottom:4pt;margin:15pt 0 6pt;break-after:avoid}
+ .print-profile dt{font-weight:bold;margin-top:8pt;break-after:avoid}
+ .print-profile dd{margin:3pt 0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5;orphans:2;widows:2}
+}
+</style>
+</head>
+<body>
+<header>
+ <div class="brand"><div class="logo">L:O</div><div><strong>LOG:ON</strong><small>LOGISTICS PORTFOLIO SYSTEM</small></div></div>
+ <div class="user"><span id="userLabel">로그인 전</span><button class="ghost" id="logoutBtn" hidden>로그아웃</button></div>
+</header>
+<main>
+ <section id="loginView" class="panel login">
+  <div class="eyebrow">MEMBER ACCESS</div>
+  <h1>로그온 포트폴리오</h1>
+  <p class="sub">가입할 때 설정한 이름과 비밀번호로 로그인하세요.</p>
+  <form id="loginForm">
+   <label class="field">이름<input name="name" autocomplete="username" required maxlength="50"></label>
+   <label class="field">비밀번호<input name="password" type="password" autocomplete="current-password" required maxlength="128"></label>
+   <button class="blue">로그인</button>
+  </form>
+  <form id="registerForm" hidden>
+   <label class="field">이름<input name="name" autocomplete="username" required minlength="2" maxlength="50"></label>
+   <label class="field">전화번호<input name="phone" type="tel" autocomplete="tel" placeholder="010-1234-5678" required maxlength="24"></label>
+   <label class="field">학번<input name="student" required maxlength="30"></label>
+   <label class="field">비밀번호<input name="password" type="password" autocomplete="new-password" required minlength="8" maxlength="128"></label>
+   <label class="field" id="signupInvite">관리자 초대 코드 (초대받은 경우)<input name="invite" autocomplete="off" maxlength="36"></label>
+   <p class="sub">전화번호와 학번은 가입 정보로 저장되며 공개되지 않습니다. 이름과 학번은 각각 한 번만 등록할 수 있습니다.</p>
+   <button class="blue">가입하기</button>
+  </form>
+  <p class="error" id="loginError" role="alert" hidden></p>
+  <p><button type="button" class="light" id="switchAuth">회원가입</button></p>
+ </section>
+ <div id="appView" hidden>
+  <div class="hero"><div><div class="eyebrow">CAREER ARCHIVE</div><h1>나의 물류 커리어를 기록하다.</h1><div class="sub">로그온 구성원의 경험과 성장을 한곳에 모으는 개인 포트폴리오</div></div><span id="rolePill" class="pill"></span></div>
+  <div class="admin-controls" id="adminControls" hidden>
+   <a id="verifyOwner" href="/signin-with-chatgpt?return_to=%2F" hidden>관리자 권한 확인 · ChatGPT로 로그인</a>
+   <form id="activateAdmin" hidden>
+    <label class="field">관리자 초대 코드<input name="invite" autocomplete="off" maxlength="36" required></label>
+    <button type="submit">관리자 권한 활성화</button>
+   </form>
+   <label class="field" id="memberPicker" hidden>관리할 포트폴리오<select id="adminMembers"><option value="">내 포트폴리오</option></select></label>
+  </div>
+  <div class="layout" style="grid-template-columns:minmax(0,1fr)">
+   <section class="panel">
+    <div class="toolbar"><div><h2 id="profileTitle"></h2><div class="sub" id="profileSub"></div></div><div class="actions"><button class="light" id="backup">백업</button><button class="light" id="print">PDF / 인쇄</button><button class="blue" form="profileForm">저장하기</button></div></div>
+    <div class="stats"><div class="stat">등록 경력·활동<b id="statCareer">0</b></div><div class="stat">자격증·어학<b id="statCert">0</b></div><div class="stat">포트폴리오 작성률<b id="statProgress">0%</b></div></div>
+    <p id="saveStatus" class="status" role="status" hidden></p>
+    <form id="profileForm"></form>
+    <article id="printProfile" class="print-profile"></article>
+   </section>
+  </div>
+ </div>
+</main>
+<footer>LOG:ON · LOGISTICS PORTFOLIO</footer>
+<script src="app.js"></script>
+</body>
+</html>
