@@ -1,6 +1,8 @@
 # LOG:ON 물류 포트폴리오
 
-기존 공개 LOG:ON 사이트의 소스입니다. [운영 사이트](https://log-on-logistics-portfolio.gayoungk1.chatgpt.site)에서 회원가입, 이름과 비밀번호 로그인, 개인 포트폴리오 저장 및 PDF 인쇄를 사용할 수 있습니다.
+기존 공개 LOG:ON 사이트의 소스입니다. [운영 사이트](https://log-on-logistics-portfolio.gayoungk1.chatgpt.site)에서 초대 코드로 회원가입, 이름과 비밀번호 로그인, 개인 포트폴리오 저장 및 PDF 인쇄를 사용할 수 있습니다.
+
+회장과 부회장은 회원 관리에서 7일 유효한 일회용 초대 코드를 만들고, 일반 부원을 비활성화하거나 복구할 수 있습니다. 비활성화하면 로그인 세션이 종료되며 포트폴리오 기록은 보관됩니다.
 
 ## 구조
 

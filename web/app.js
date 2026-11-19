@@ -25,7 +25,12 @@ const registerForm = byId("registerForm");
 let activeMember = null;
 let editingMemberId = "";
 let savedProfile = "";
-const memberPicker = byId("adminMembers");
+let profileVersion = 0;
+let page = 0;
+let adminView = 0;
+let portfolioRequest = 0;
+let saving = false;
+const roleNames = {chair:"회장", vice:"부회장", member:"일반 부원"};
 
 function element(tag, text, className) {
   const node = document.createElement(tag);
@@ -95,7 +100,8 @@ function showLoginError(message) {
   byId("loginError").hidden = !message;
 }
 
-function loadPortfolio({name, profile}) {
+function loadPortfolio({name, profile, version}) {
+  profileVersion = version;
   activeMember = name;
   for (const [key, input] of fields) input.value = profile[key] || "";
   savedProfile = JSON.stringify(readForm());
@@ -107,47 +113,117 @@ function loadPortfolio({name, profile}) {
 
 function showProfile(account) {
   editingMemberId = "";
-  memberPicker.replaceChildren(new Option("내 포트폴리오", ""));
+  page = 0;
   byId("userLabel").textContent = account.name + " 로그인";
-  byId("rolePill").textContent = account.admin ? "관리자" : "MEMBER";
+  byId("rolePill").textContent = roleNames[account.role];
   byId("adminControls").hidden = !account.adminEligible && !account.admin && !account.inviteEligible;
   byId("activateAdmin").hidden = !account.inviteEligible;
   byId("verifyOwner").hidden = !account.adminEligible || account.admin;
-  byId("memberPicker").hidden = !account.admin;
+  byId("memberDashboard").hidden = !account.admin;
   byId("loginView").hidden = true;
   byId("appView").hidden = false;
   byId("logoutBtn").hidden = false;
   loadPortfolio(account);
-  if (account.admin) {
-    api("admin/members").then(({members}) => {
-      memberPicker.append(...members.filter(member => member.name !== account.name)
-        .map(member => new Option(member.name, member.id)));
-    }).catch(error => status(error.message));
+  if (account.admin) loadMembers();
+}
+
+function adminStatus(message) {
+  byId("adminStatus").textContent = message;
+}
+
+async function loadMembers(requestedPage = page) {
+  const view = ++adminView;
+  try {
+    const {members, pages} = await api("admin/members?page=" + requestedPage);
+    if (view !== adminView) return;
+    if (requestedPage >= pages) return loadMembers(pages - 1);
+    page = requestedPage;
+    byId("pageNumber").textContent = (page + 1) + " / " + pages;
+    byId("prevPage").disabled = page === 0;
+    byId("nextPage").disabled = page + 1 >= pages;
+    byId("memberRows").replaceChildren(...members.map(member => {
+      const row = element("tr");
+      const actions = element("td");
+      const open = element("button", "열기", "light");
+      open.addEventListener("click", () => openPortfolio(member.id));
+      actions.append(open);
+      if (member.role === "member") {
+        const change = element("button", member.active ? "비활성화" : "복구", "light");
+        change.addEventListener("click", async () => {
+          change.disabled = true;
+          try {
+            await api("admin/members/" + member.id, "PATCH", {active:!member.active});
+            adminStatus(member.name + (member.active ? " 계정을 비활성화했습니다." : " 계정을 복구했습니다."));
+            await loadMembers();
+          } catch (error) {
+            adminStatus(error.message);
+          } finally {
+            change.disabled = false;
+          }
+        });
+        actions.append(change);
+      }
+      row.append(element("td", member.name), element("td", roleNames[member.role]), element("td", member.active ? "활성" : "비활성"),
+        element("td", member.progress + "%"), actions);
+      return row;
+    }));
+  } catch (error) {
+    if (view === adminView) adminStatus(error.message);
   }
 }
 
-memberPicker.addEventListener("change", async () => {
-  if (savedProfile !== JSON.stringify(readForm())) {
-    memberPicker.value = editingMemberId;
-    status("다른 포트폴리오를 열기 전에 변경 내용을 저장해 주세요.");
+async function openPortfolio(id) {
+  if (saving || savedProfile !== JSON.stringify(readForm())) {
+    adminStatus("다른 포트폴리오를 열기 전에 작성 내용을 저장해 주세요.");
     return;
   }
-  memberPicker.disabled = true;
-  const requestedId = memberPicker.value;
+  const request = ++portfolioRequest;
   try {
-    const portfolio = await api(requestedId ? "admin/members/" + requestedId : "profile");
-    editingMemberId = requestedId;
+    const portfolio = await api(id ? "admin/members/" + id : "profile");
+    if (request !== portfolioRequest) return;
+    editingMemberId = id;
     loadPortfolio(portfolio);
+    adminStatus("");
+    profileForm.scrollIntoView({block:"nearest"});
   } catch (error) {
-    memberPicker.value = editingMemberId;
-    status(error.message);
+    if (request === portfolioRequest) adminStatus(error.message);
+  }
+}
+
+byId("prevPage").addEventListener("click", () => loadMembers(page - 1));
+byId("nextPage").addEventListener("click", () => loadMembers(page + 1));
+byId("openOwn").addEventListener("click", () => openPortfolio(""));
+byId("inviteForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submit = form.querySelector("button");
+  submit.disabled = true;
+  byId("createdInvite").hidden = true;
+  byId("createdCode").value = "";
+  try {
+    const {code} = await api("admin/members", "POST", Object.fromEntries(new FormData(form)));
+    form.reset();
+    byId("createdCode").value = code;
+    byId("createdInvite").hidden = false;
+    adminStatus("가입 링크와 초대 코드를 해당 회원에게 전달해 주세요.");
+    byId("createdCode").focus();
+    byId("createdCode").select();
+  } catch (error) {
+    adminStatus(error.message);
   } finally {
-    memberPicker.disabled = false;
+    submit.disabled = false;
   }
 });
 
 function showLogin() {
   activeMember = null;
+  adminView++;
+  portfolioRequest++;
+  byId("memberRows").replaceChildren();
+  byId("createdCode").value = "";
+  byId("createdInvite").hidden = true;
+  byId("inviteForm").reset();
+  adminStatus("");
   profileForm.reset();
   byId("printProfile").replaceChildren();
   byId("appView").hidden = true;
@@ -222,8 +298,11 @@ profileForm.addEventListener("submit", async event => {
   submit.disabled = true;
   try {
     const profile = readForm();
-    memberPicker.disabled = true;
-    await api(editingMemberId ? "admin/members/" + editingMemberId : "profile", "PUT", profile);
+    saving = true;
+    portfolioRequest++;
+    const {version} = await api(editingMemberId ? "admin/members/" + editingMemberId : "profile", "PUT", {...profile,version:profileVersion});
+    profileVersion = version;
+    if (!byId("memberDashboard").hidden) loadMembers();
     savedProfile = JSON.stringify(profile);
     status("포트폴리오를 저장했습니다.");
   } catch (error) {
@@ -235,7 +314,7 @@ profileForm.addEventListener("submit", async event => {
     }
   } finally {
     submit.disabled = false;
-    memberPicker.disabled = false;
+    saving = false;
   }
 });
 

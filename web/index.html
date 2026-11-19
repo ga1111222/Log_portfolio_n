@@ -18,6 +18,7 @@ main{max-width:1180px;margin:28px auto;padding:0 20px}.hero,.toolbar{display:fle
 @media(max-width:800px){.layout{grid-template-columns:1fr}.members{grid-template-columns:repeat(2,1fr)}.hero{align-items:start}header{padding:17px 20px}}
 @media(max-width:520px){.grid{grid-template-columns:1fr}.user span{display:none}.stats{grid-template-columns:1fr 1fr}.panel{padding:16px}.login{margin:30px auto}h1{font-size:26px}}
  .admin-controls{margin:0 0 18px}.admin-controls a{color:#12688d}.admin-controls select{max-width:360px}
+.invite-form{display:flex;flex-wrap:wrap;align-items:end;gap:12px;margin-top:15px}.invite-form .field{flex:1 1 200px}.pagination{margin-top:14px}.tablewrap td:last-child button{margin:3px}
 @page{size:A4;margin:16mm}
 @media print{
  header,footer,.hero,.admin-controls,.toolbar,.stats,#profileForm,#saveStatus{display:none!important}
@@ -50,8 +51,8 @@ main{max-width:1180px;margin:28px auto;padding:0 20px}.hero,.toolbar{display:fle
    <label class="field">전화번호<input name="phone" type="tel" autocomplete="tel" placeholder="010-1234-5678" required maxlength="24"></label>
    <label class="field">학번<input name="student" required maxlength="30"></label>
    <label class="field">비밀번호<input name="password" type="password" autocomplete="new-password" required minlength="8" maxlength="128"></label>
-   <label class="field" id="signupInvite">관리자 초대 코드 (초대받은 경우)<input name="invite" autocomplete="off" maxlength="36"></label>
-   <p class="sub">전화번호와 학번은 가입 정보로 저장되며 공개되지 않습니다. 이름과 학번은 각각 한 번만 등록할 수 있습니다.</p>
+   <label class="field">초대 코드<input name="invite" autocomplete="off" minlength="36" maxlength="36" required></label>
+   <p class="sub">전화번호와 학번은 가입 정보로 저장되며 공개되지 않습니다. 회장 또는 부회장에게 받은 초대 코드로 가입하세요.</p>
    <button class="blue">가입하기</button>
   </form>
   <p class="error" id="loginError" role="alert" hidden></p>
@@ -65,7 +66,21 @@ main{max-width:1180px;margin:28px auto;padding:0 20px}.hero,.toolbar{display:fle
     <label class="field">관리자 초대 코드<input name="invite" autocomplete="off" maxlength="36" required></label>
     <button type="submit">관리자 권한 활성화</button>
    </form>
-   <label class="field" id="memberPicker" hidden>관리할 포트폴리오<select id="adminMembers"><option value="">내 포트폴리오</option></select></label>
+   <section class="panel" id="memberDashboard" hidden>
+    <h2>회원 관리</h2>
+    <form id="inviteForm" class="invite-form">
+     <label class="field">가입할 이름<input name="name" required minlength="2" maxlength="50"></label>
+     <button class="blue">회원 초대 코드 만들기</button>
+    </form>
+    <p id="adminStatus" class="status" role="status"></p>
+    <label class="field" id="createdInvite" hidden>초대 코드 · 7일간 유효<input id="createdCode" readonly></label>
+    <div class="tablewrap"><table>
+     <thead><tr><th>이름</th><th>권한</th><th>상태</th><th>작성률</th><th>관리</th></tr></thead>
+     <tbody id="memberRows"></tbody>
+    </table></div>
+    <div class="actions pagination"><button id="prevPage" class="light">이전</button><span id="pageNumber"></span><button id="nextPage" class="light">다음</button>
+     <button id="openOwn" class="light">내 포트폴리오</button></div>
+   </section>
   </div>
   <div class="layout" style="grid-template-columns:minmax(0,1fr)">
    <section class="panel">
