@@ -1,4 +1,11 @@
 const byId = id => document.getElementById(id);
+const themeSelect = byId("themeSelect");
+themeSelect.value = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+themeSelect.addEventListener("change", () => {
+  document.documentElement.dataset.theme = themeSelect.value;
+  try { localStorage.setItem("logon-theme",themeSelect.value); } catch {}
+});
+
 const sections = [
   ["기본 프로필", [
     ["name", "이름", "이름"], ["major", "학교 / 전공", "학교 및 전공"],
@@ -153,11 +160,11 @@ function renderFeed(kind) {
     (!category || (external ? item.topics.includes(category) : item.category === category)));
   byId(kind + "Items").replaceChildren(...items.map(item => {
     const row = element("li", undefined, "feed-item");
-    const meta = [external ? item.topics.join(" · ") : item.scope, item.category, item.source, item.date && "게시 " + item.date, item.deadline && "마감 " + item.deadline];
+    const meta = [external ? item.topics.join(" · ") : item.scope, item.category, item.source, item.date && "게시 " + item.date, item.deadline && "마감 " + item.deadline, item.previousDates && "이전 원문 확인"];
     row.append(feedLink(item.title, item.url), element("p",meta.filter(Boolean).join(" / "),"sub"));
     return row;
   }));
-  const details = data.stale ? "이전 수집 자료" : data.partial ? "일부 출처의 최신 자료를 확인하지 못했습니다." : "";
+  const details = data.stale ? "이전 수집 자료" : data.partial ? (kind === "campus" && byId("campusOpenOnly").checked ? "일부 공고의 모집 기간을 확인하지 못했습니다." : "일부 출처의 최신 자료를 확인하지 못했습니다.") : "";
   byId(kind + "Status").textContent = [
     "확인 " + feedDate.format(new Date(data.checkedAt)), details,
     items.length ? items.length + "건" : kind === "campus" && byId("campusOpenOnly").checked ? "모집 중으로 확인된 공고가 없습니다." : "조건에 맞는 공고가 없습니다."

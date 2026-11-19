@@ -150,21 +150,40 @@ async function campusFeed(openOnly) {
     return entry && {...entry,scope:item.scope};
   }).filter(Boolean);
   if (openOnly) {
-    const candidates = items.filter(item => !item.deadline && new URL(item.url).hostname === "kscms.ks.ac.kr").slice(0, 15);
+    const verified = new Map(bundledCampusRecruiting.items.map(item => [campusNoticeKey(item.url), item]));
+    const candidates = items.filter(item => !item.deadline && campusNoticeKey(item.url))
+      .sort((a, b) => Number(verified.has(campusNoticeKey(b.url))) - Number(verified.has(campusNoticeKey(a.url))))
+      .slice(0, 15);
     for (let i = 0; i < candidates.length; i += 5) {
       await Promise.all(candidates.slice(i, i + 5).map(async item => {
         try {
-          const html = await remoteFeed(item.url, "text", 3000);
+          const html = await remoteFeed(item.url, "text", 5000);
           Object.assign(item, registrationDates(html, item.date));
         } catch {
           // Dates from an unavailable notice remain unknown.
         }
       }));
     }
+    for (const item of candidates) {
+      const known = verified.get(campusNoticeKey(item.url));
+      if (!item.deadline && known?.title === item.title && currentlyRecruiting(known)) {
+        item.start = known.start;
+        item.deadline = known.deadline;
+        item.previousDates = true;
+      }
+    }
   }
-  return {items:openOnly ? items.filter(currentlyRecruiting) : items,partial:!sources.length || sources.some(source => !["live","provided"].includes(source.state)),
+  return {items:openOnly ? items.filter(currentlyRecruiting) : items,partial:!sources.length || sources.some(source => !["live","provided"].includes(source.state)) ||
+      (openOnly && items.some(item => !item.deadline || item.previousDates)),
     sources:sources.map(source => ({name:normalized(source.name),url:officialLink(source.url),
       checkedAt:dateTime(source.checked_at),state:source.state}))};
+}
+
+function campusNoticeKey(value) {
+  const url = new URL(value);
+  if (url.hostname !== "kscms.ks.ac.kr" || url.pathname !== "/kor/CMS/Board/Board.do") return null;
+  const id = url.searchParams.get("board_seq");
+  return /^\d+$/.test(id || "") ? id : null;
 }
 
 function koreanToday() {
@@ -259,6 +278,10 @@ async function readActivityFeed(request, route, db) {
   if (snapshot && current - checked < freshness) return present(snapshot);
   try {
     const data = route === "campus" ? await campusFeed(openOnly) : await externalFeed();
+    if (openOnly && data.partial && !data.items.length) {
+      const previous = snapshot?.items.some(currentlyRecruiting) ? snapshot : bundledCampusRecruiting;
+      if (previous.items.some(currentlyRecruiting)) return present(previous, true);
+    }
     if (route === "external" && data.partial && !data.items.length) return present(snapshot?.items.length ? snapshot : bundledExternalFeed, true);
     const timestamp = Date.now();
     const latest = {...data,checkedAt:new Date(timestamp).toISOString()};
@@ -274,6 +297,7 @@ async function readActivityFeed(request, route, db) {
   } catch {
     if (snapshot && (route === "external" || current - checked <= day)) return present(snapshot, true);
     if (route === "external") return present(bundledExternalFeed, true);
+    if (openOnly && bundledCampusRecruiting.items.some(currentlyRecruiting)) return present(bundledCampusRecruiting, true);
     return error("학교 공지를 다시 확인하지 못했습니다. 경성대학교 교내소식에서 원문을 확인해 주세요.", 503);
   }
 }
