@@ -98,7 +98,6 @@ async function authenticate(db, request, action, body, now) {
   return createSession(db, member, now);
 }
 
-const campusSchools = new Set(["ks", "pknu", "tongmyong"]);
 const sectors = {"물류":/물류|SCM|공급망/i,"무역":/무역|수출입|통상/,"유통":/유통|리테일/,"해운":/해운|선박/,"항만":/항만|항구/};
 const recruitment = /공모전|아이디어 공모|서포터즈|대학생 기자단|해커톤|챌린지|교육생 모집|참가자 모집|인턴십/;
 const freshness = 180000;
@@ -129,8 +128,8 @@ async function remoteFeed(url, format) {
   return format === "json" ? response.json() : response.text();
 }
 
-async function moyeobom(school) {
-  const data = await remoteFeed("https://moyeobom-campus.gayoungk1.chatgpt.site/api/activities?school=" + school, "json");
+async function moyeobom() {
+  const data = await remoteFeed("https://moyeobom-campus.gayoungk1.chatgpt.site/api/activities?school=ks", "json");
   if (!Array.isArray(data.items) || !Array.isArray(data.sources)) throw new Error("feed_invalid");
   return data;
 }
@@ -143,8 +142,8 @@ function commonItem(item) {
     category:normalized(item.category).slice(0, 60),source:normalized(item.source).slice(0, 150)};
 }
 
-async function campusFeed(school) {
-  const data = await moyeobom(school);
+async function campusFeed() {
+  const data = await moyeobom();
   const sources = data.sources.filter(source => source.scope !== "교외");
   const items = data.items.filter(item => item.scope === "교내" || item.scope === "교내외").map(item => {
     const entry = commonItem(item);
@@ -179,7 +178,7 @@ async function industryNews() {
 
 async function externalFeed() {
   const results = await Promise.allSettled([
-    moyeobom("ks").then(data => data.items.filter(item => item.scope === "교외").map(commonItem).filter(Boolean)),
+    moyeobom().then(data => data.items.filter(item => item.scope === "교외").map(commonItem).filter(Boolean)),
     industryNews()
   ]);
   if (results.every(result => result.status === "rejected")) throw new Error("feed_unavailable");
@@ -200,13 +199,13 @@ async function externalFeed() {
 
 async function readActivityFeed(request, route) {
   const school = new URL(request.url).searchParams.get("school");
-  if (route === "campus" && !campusSchools.has(school)) return error("학교를 선택해 주세요.", 400);
-  const key = route === "campus" ? school : "external";
+  if (route === "campus" && school !== null && school !== "ks") return error("경성대학교 공고만 제공됩니다.", 400);
+  const key = route;
   const entry = activityCache.get(key) || {};
   activityCache.set(key, entry);
   if (entry.data && Date.now() - entry.at < freshness) return reply({...entry.data,checkedAt:new Date(entry.at).toISOString()});
   if (!entry.pending) {
-    entry.pending = (route === "campus" ? campusFeed(school) : externalFeed()).then(data => {
+    entry.pending = (route === "campus" ? campusFeed() : externalFeed()).then(data => {
       entry.at = Date.now();
       entry.data = data;
       return {...data,checkedAt:new Date(entry.at).toISOString()};

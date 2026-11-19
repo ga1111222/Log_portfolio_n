@@ -182,22 +182,12 @@ function updateCampusSources(data) {
 async function loadFeed(kind) {
   const state = feedState[kind];
   const campus = kind === "campus";
-  const school = campus ? byId("campusSchool").value : "";
   state.controller?.abort();
   const controller = new AbortController();
   state.controller = controller;
-  if (state.school !== school) {
-    state.school = school;
-    state.data = null;
-    byId(kind + "Items").replaceChildren();
-    if (campus) {
-      byId("campusCategory").replaceChildren(new Option("전체 분류",""));
-      byId("campusSources").replaceChildren();
-    }
-  }
   byId(kind + "Status").textContent = "공고를 확인 중입니다.";
   try {
-    const response = await fetch("/api/activities/" + kind + (school ? "?school=" + encodeURIComponent(school) : ""), {signal:controller.signal});
+    const response = await fetch("/api/activities/" + kind, {signal:controller.signal});
     const data = await response.json();
     if (!response.ok) throw new Error(data.error);
     if (controller.signal.aborted) return;
@@ -215,7 +205,6 @@ byId("externalTopic").addEventListener("change", () => renderFeed("external"));
 byId("externalQuery").addEventListener("input", () => renderFeed("external"));
 byId("campusCategory").addEventListener("change", () => renderFeed("campus"));
 byId("campusQuery").addEventListener("input", () => renderFeed("campus"));
-byId("campusSchool").addEventListener("change", () => loadFeed("campus"));
 byId("refreshExternal").addEventListener("click", () => loadFeed("external"));
 byId("refreshCampus").addEventListener("click", () => loadFeed("campus"));
 setInterval(() => {
