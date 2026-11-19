@@ -52,7 +52,7 @@ main{max-width:1180px;margin:28px auto;padding:0 20px}.hero,.toolbar{display:fle
    <label class="field">학번<input name="student" required maxlength="30"></label>
    <label class="field">비밀번호<input name="password" type="password" autocomplete="new-password" required minlength="8" maxlength="128"></label>
    <label class="field">초대 코드<input name="invite" autocomplete="off" minlength="36" maxlength="36" required></label>
-   <p class="sub">전화번호와 학번은 가입 정보로 저장되며 공개되지 않습니다. 회장 또는 부회장에게 받은 초대 코드로 가입하세요.</p>
+   <p class="sub">전화번호와 학번은 가입 정보로 저장되며 공개되지 않습니다. 관리자에게 받은 초대 코드로 가입하세요.</p>
    <button class="blue">가입하기</button>
   </form>
   <p class="error" id="loginError" role="alert" hidden></p>
@@ -61,12 +61,7 @@ main{max-width:1180px;margin:28px auto;padding:0 20px}.hero,.toolbar{display:fle
  <div id="appView" hidden>
   <div class="hero"><div><div class="eyebrow">CAREER ARCHIVE</div><h1>나의 물류 커리어를 기록하다.</h1><div class="sub">로그온 구성원의 경험과 성장을 한곳에 모으는 개인 포트폴리오</div></div><span id="rolePill" class="pill"></span></div>
   <div class="admin-controls" id="adminControls" hidden>
-   <a id="verifyOwner" href="/signin-with-chatgpt?return_to=%2F" hidden>관리자 권한 확인 · ChatGPT로 로그인</a>
-   <form id="activateAdmin" hidden>
-    <label class="field">관리자 초대 코드<input name="invite" autocomplete="off" maxlength="36" required></label>
-    <button type="submit">관리자 권한 활성화</button>
-   </form>
-   <section class="panel" id="memberDashboard" hidden>
+   <section class="panel">
     <h2>회원 관리</h2>
     <form id="inviteForm" class="invite-form">
      <label class="field">가입할 이름<input name="name" required minlength="2" maxlength="50"></label>

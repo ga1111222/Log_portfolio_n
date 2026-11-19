@@ -60,13 +60,11 @@ async function createSession(db, member, now) {
   });
 }
 
-async function validAdminInvite(value, env) {
-  const code = normalized(value);
-  return /^[a-f0-9]{36}$/.test(code) && Boolean(env.LOGON_PARK_INVITE_HASH) &&
-    equal(await sha256(code), env.LOGON_PARK_INVITE_HASH);
+function adminIds(env) {
+  return new Set(normalized(env.LOGON_ADMIN_MEMBER_IDS).split(",").map(id => id.trim()).filter(Boolean));
 }
 
-async function authenticate(db, request, action, body, now, env) {
+async function authenticate(db, request, action, body, now) {
   if (!await throttle(db, request, action, now)) return error("요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.", 429);
   const name = normalizedName(body.name);
   const password = typeof body.password === "string" ? body.password : "";
@@ -84,19 +82,18 @@ async function authenticate(db, request, action, body, now, env) {
   if (!/^\+?\d{8,15}$/.test(phone) || !/^[A-Z0-9-]{2,30}$/.test(student)) {
     return error("전화번호와 학번을 확인해 주세요.", 400);
   }
-  const invited = name === env.LOGON_INVITED_ADMIN_NAME;
   const code = normalized(body.invite);
-  if (!/^[a-f0-9]{36}$/.test(code) || (invited && !await validAdminInvite(code, env))) {
+  if (!/^[a-f0-9]{36}$/.test(code)) {
     return error("가입할 이름과 초대 코드를 확인해 주세요.", 403);
   }
   const member = {id: crypto.randomUUID(), name};
   const salt = random(16);
   const hash = await passwordHash(password, salt);
-  const inviteHash = invited ? null : await sha256(code);
-  const result = await db.prepare(`INSERT INTO members (id, name, student_number, phone, password_hash, salt, is_admin, invite_hash)
-    SELECT ?, ?, ?, ?, ?, ?, ?, ?
-    WHERE ? IS NULL OR EXISTS (SELECT 1 FROM member_invites WHERE token_hash = ? AND name = ? AND expires > ?)
-    ON CONFLICT DO NOTHING`).bind(member.id, name, student, phone, hash, salt, Number(invited), inviteHash, inviteHash, inviteHash, name, now).run();
+  const inviteHash = await sha256(code);
+  const result = await db.prepare(`INSERT INTO members (id, name, student_number, phone, password_hash, salt, invite_hash)
+    SELECT ?, ?, ?, ?, ?, ?, ?
+    WHERE EXISTS (SELECT 1 FROM member_invites WHERE token_hash = ? AND name = ? AND expires > ?)
+    ON CONFLICT DO NOTHING`).bind(member.id, name, student, phone, hash, salt, inviteHash, inviteHash, name, now).run();
   if (!result.meta.changes) return error("초대 코드가 유효하지 않거나 이미 등록된 이름 또는 학번입니다.", 409);
   return createSession(db, member, now);
 }
@@ -116,7 +113,7 @@ async function handleApi(request, env, path) {
     if (!body || typeof body !== "object") return error("요청 내용을 확인해 주세요.", 400);
   }
   if (method === "POST" && (path === "/api/login" || path === "/api/register")) {
-    return authenticate(db, request, path.slice(5), body, now, env);
+    return authenticate(db, request, path.slice(5), body, now);
   }
   const token = request.headers.get("Cookie")?.match(/(?:^|;\s*)logon_session=([a-f0-9]{64})(?:;|$)/)?.[1];
   if (!token) return error("로그인해 주세요.", 401);
@@ -125,26 +122,15 @@ async function handleApi(request, env, path) {
     await db.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(tokenHash).run();
     return reply({}, 200, {"Set-Cookie": cookie + "=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0"});
   }
-  const member = await db.prepare("SELECT members.id, members.name, members.profile, members.is_admin, members.version FROM sessions JOIN members ON members.id = sessions.member_id WHERE token_hash = ? AND expires > ? AND members.active = 1")
+  const member = await db.prepare("SELECT members.id, members.name, members.profile, members.version FROM sessions JOIN members ON members.id = sessions.member_id WHERE token_hash = ? AND expires > ? AND members.active = 1")
     .bind(tokenHash, now).first();
   if (!member) return error("다시 로그인해 주세요.", 401);
-  const adminEligible = member.name === env.LOGON_ADMIN_NAME && Boolean(env.LOGON_ADMIN_EMAIL);
-  const verifiedEmail = request.headers.get("oai-authenticated-user-email");
-  const admin = Boolean(member.is_admin) || (adminEligible &&
-    Boolean(request.headers.get("oai-authenticated-user-id")) &&
-    verifiedEmail?.toLowerCase() === env.LOGON_ADMIN_EMAIL.toLowerCase());
-  const inviteEligible = member.name === env.LOGON_INVITED_ADMIN_NAME && !admin;
-  if (method === "POST" && path === "/api/admin/activate") {
-    if (!inviteEligible || !await validAdminInvite(body.invite, env)) {
-      return error("관리자 초대 코드를 확인해 주세요.", 403);
-    }
-    await db.prepare("UPDATE members SET is_admin = 1 WHERE id = ? AND active = 1").bind(member.id).run();
-    return reply({admin: true});
-  }
+  const administrators = adminIds(env);
+  const admin = administrators.has(member.id);
   if (method === "GET" && path === "/api/profile") {
     return reply({
       name:member.name, profile:{...JSON.parse(member.profile),name:member.name}, version:member.version,
-      admin, adminEligible, inviteEligible, role:adminEligible && admin ? "chair" : admin ? "vice" : "member"
+      admin, role:admin ? "admin" : "member"
     });
   }
   const targetId = path.match(/^\/api\/admin\/members\/([a-f0-9-]{36})$/)?.[1];
@@ -157,13 +143,13 @@ async function handleApi(request, env, path) {
       return error("페이지를 확인해 주세요.", 400);
     }
     const [entries, totals] = await db.batch([
-      db.prepare("SELECT id, name, active, is_admin, profile FROM members ORDER BY name, id LIMIT ? OFFSET ?").bind(pageSize, requested * pageSize),
+      db.prepare("SELECT id, name, active, profile FROM members ORDER BY name, id LIMIT ? OFFSET ?").bind(pageSize, requested * pageSize),
       db.prepare("SELECT count(*) AS count FROM members")
     ]);
     return reply({
-      members:entries.results.map(({id, name, active, is_admin, profile}) => {
+      members:entries.results.map(({id, name, active, profile}) => {
         const content = JSON.parse(profile);
-        return {id,name,active:Boolean(active),role:name === env.LOGON_ADMIN_NAME ? "chair" : is_admin || name === env.LOGON_INVITED_ADMIN_NAME ? "vice" : "member",
+        return {id,name,active:Boolean(active),role:administrators.has(id) ? "admin" : "member",
           progress:tracked.filter(key => typeof content[key] === "string" && content[key].trim()).length * 10};
       }),
       pages:Math.max(1,Math.ceil(totals.results[0].count / pageSize))
@@ -172,7 +158,6 @@ async function handleApi(request, env, path) {
   if (path === "/api/admin/members" && method === "POST") {
     const name = normalizedName(body.name);
     if (name.length < 2 || name.length > 50) return error("이름은 2~50자로 입력해 주세요.", 400);
-    if (name === env.LOGON_INVITED_ADMIN_NAME) return error("부회장 계정은 전용 초대 코드를 사용해 주세요.", 400);
     const code = random(18);
     const expiry = now + lifetime;
     const result = await db.prepare(`INSERT INTO member_invites (token_hash, name, expires)
@@ -182,15 +167,15 @@ async function handleApi(request, env, path) {
   }
   let target = member;
   if (targetId) {
-    target = await db.prepare("SELECT id, name, profile, version, is_admin FROM members WHERE id = ?").bind(targetId).first();
+    target = await db.prepare("SELECT id, name, profile, version FROM members WHERE id = ?").bind(targetId).first();
     if (!target) return error("회원을 찾을 수 없습니다.", 404);
     if (method === "PATCH") {
       if (typeof body.active !== "boolean") return error("회원 상태를 확인해 주세요.", 400);
-      if (target.is_admin || target.name === env.LOGON_ADMIN_NAME || target.name === env.LOGON_INVITED_ADMIN_NAME) {
-        return error("회장과 부회장 계정은 비활성화할 수 없습니다.", 403);
+      if (administrators.has(target.id)) {
+        return error("관리자 계정은 비활성화할 수 없습니다.", 403);
       }
       await db.batch([
-        db.prepare("UPDATE members SET active = ? WHERE id = ? AND is_admin = 0").bind(Number(body.active), target.id),
+        db.prepare("UPDATE members SET active = ? WHERE id = ?").bind(Number(body.active), target.id),
         db.prepare("DELETE FROM sessions WHERE member_id = ? AND ? = 0").bind(target.id, Number(body.active))
       ]);
       return reply({});

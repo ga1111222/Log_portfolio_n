@@ -30,7 +30,7 @@ let page = 0;
 let adminView = 0;
 let portfolioRequest = 0;
 let saving = false;
-const roleNames = {chair:"회장", vice:"부회장", member:"일반 부원"};
+const roleNames = {admin:"관리자", member:"일반 부원"};
 
 function element(tag, text, className) {
   const node = document.createElement(tag);
@@ -116,10 +116,7 @@ function showProfile(account) {
   page = 0;
   byId("userLabel").textContent = account.name + " 로그인";
   byId("rolePill").textContent = roleNames[account.role];
-  byId("adminControls").hidden = !account.adminEligible && !account.admin && !account.inviteEligible;
-  byId("activateAdmin").hidden = !account.inviteEligible;
-  byId("verifyOwner").hidden = !account.adminEligible || account.admin;
-  byId("memberDashboard").hidden = !account.admin;
+  byId("adminControls").hidden = !account.admin;
   byId("loginView").hidden = true;
   byId("appView").hidden = false;
   byId("logoutBtn").hidden = false;
@@ -232,23 +229,6 @@ function showLogin() {
   byId("userLabel").textContent = "로그인 전";
 }
 
-byId("activateAdmin").addEventListener("submit", async event => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const submit = form.querySelector("button");
-  submit.disabled = true;
-  try {
-    await api("admin/activate", "POST", Object.fromEntries(new FormData(form)));
-    form.reset();
-    showProfile(await api("profile"));
-    status("관리자 권한을 활성화했습니다.");
-  } catch (error) {
-    status(error.message);
-  } finally {
-    submit.disabled = false;
-  }
-});
-
 byId("switchAuth").addEventListener("click", () => {
   const registering = registerForm.hidden;
   loginForm.reset();
@@ -302,7 +282,7 @@ profileForm.addEventListener("submit", async event => {
     portfolioRequest++;
     const {version} = await api(editingMemberId ? "admin/members/" + editingMemberId : "profile", "PUT", {...profile,version:profileVersion});
     profileVersion = version;
-    if (!byId("memberDashboard").hidden) loadMembers();
+    if (!byId("adminControls").hidden) loadMembers();
     savedProfile = JSON.stringify(profile);
     status("포트폴리오를 저장했습니다.");
   } catch (error) {
