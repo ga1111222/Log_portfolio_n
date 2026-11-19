@@ -103,6 +103,8 @@ const recruitment = /공모전|아이디어 공모|서포터즈|대학생 기자
 const freshness = 180000;
 const day = 86400000;
 const activityCache = new Map();
+const campusTopics = {...sectors,"물류":/물류|SCM|공급망|포워딩|물류관리/i,"무역":/무역|수출입|통상|관세|FTA/i,
+  "유통":/유통|리테일|이커머스|전자상거래/,"해운":/해운|선박|선사|해사/,"항만":/항만|항구|항만공사/};
 
 function officialLink(value) {
   try {
@@ -142,39 +144,14 @@ function commonItem(item) {
     category:normalized(item.category).slice(0, 60),source:normalized(item.source).slice(0, 150)};
 }
 
-async function campusFeed(openOnly) {
+async function campusFeed() {
   const data = await moyeobom();
   const sources = data.sources.filter(source => source.scope !== "교외");
   const items = data.items.filter(item => item.scope === "교내" || item.scope === "교내외").map(item => {
     const entry = commonItem(item);
     return entry && {...entry,scope:item.scope};
   }).filter(Boolean);
-  if (openOnly) {
-    const verified = new Map(bundledCampusRecruiting.items.map(item => [campusNoticeKey(item.url), item]));
-    const candidates = items.filter(item => !item.deadline && campusNoticeKey(item.url))
-      .sort((a, b) => Number(verified.has(campusNoticeKey(b.url))) - Number(verified.has(campusNoticeKey(a.url))))
-      .slice(0, 15);
-    for (let i = 0; i < candidates.length; i += 5) {
-      await Promise.all(candidates.slice(i, i + 5).map(async item => {
-        try {
-          const html = await remoteFeed(item.url, "text", 5000);
-          Object.assign(item, registrationDates(html, item.date));
-        } catch {
-          // Dates from an unavailable notice remain unknown.
-        }
-      }));
-    }
-    for (const item of candidates) {
-      const known = verified.get(campusNoticeKey(item.url));
-      if (!item.deadline && known?.title === item.title && currentlyRecruiting(known)) {
-        item.start = known.start;
-        item.deadline = known.deadline;
-        item.previousDates = true;
-      }
-    }
-  }
-  return {items:openOnly ? items.filter(currentlyRecruiting) : items,partial:!sources.length || sources.some(source => !["live","provided"].includes(source.state)) ||
-      (openOnly && items.some(item => !item.deadline || item.previousDates)),
+  return {items,partial:!sources.length || sources.some(source => !["live","provided"].includes(source.state)),
     sources:sources.map(source => ({name:normalized(source.name),url:officialLink(source.url),
       checkedAt:dateTime(source.checked_at),state:source.state}))};
 }
@@ -186,30 +163,38 @@ function campusNoticeKey(value) {
   return /^\d+$/.test(id || "") ? id : null;
 }
 
-function koreanToday() {
-  return new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+function campusItemDetails(item) {
+  return {
+    ...item,
+    key:campusNoticeKey(item.url) || item.url,
+    topics:Object.entries(campusTopics).filter(([, pattern]) => pattern.test(item.title)).map(([name]) => name)
+  };
 }
 
-function currentlyRecruiting(item) {
-  const today = koreanToday();
-  return item.deadline && item.deadline >= today &&
-    (item.start ? item.start <= today : item.date && item.date <= today) &&
-    !/모집\s*마감|접수\s*마감|신청\s*마감|모집\s*종료|선정\s*결과/.test(item.title);
-}
-
-function registrationDates(html, posted) {
-  const content = html.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
-    .replace(/<[^>]*>|&nbsp;|&#160;/g, " ").replace(/&sim;|&#126;/g, "~").replace(/\s+/g, " ");
-  const range = content.match(/(?:신청|접수|모집)\s*기간\s*[:：]?\s*(?:(\d{4})\s*[.\-/년]\s*)?(\d{1,2})\s*[.\-/월]\s*(\d{1,2})\s*(?:[.일]\s*)?(?:\([^)]{1,8}\)\s*)?(?:\d{1,2}:\d{2}\s*)?[~～∼–—-]\s*(?:(\d{4})\s*[.\-/년]\s*)?(\d{1,2})\s*[.\-/월]\s*(\d{1,2})/);
-  if (!range) return {};
-  const [, firstYear, firstMonth, firstDay, lastYear, lastMonth, lastDay] = range;
-  const year = firstYear || posted?.slice(0, 4);
-  if (!year) return {};
-  const date = (y,m,d) => [y,m.padStart(2,"0"),d.padStart(2,"0")].join("-");
-  const start = date(year, firstMonth, firstDay);
-  const deadline = date(lastYear || year, lastMonth, lastDay);
-  const valid = value => dateTime(value)?.slice(0,10) === value;
-  return valid(start) && valid(deadline) && start <= deadline ? {start,deadline} : {};
+async function campusFavorites(db, memberId, method, body, now) {
+  if (method === "GET") {
+    const {results} = await db.prepare("SELECT data FROM campus_favorites WHERE member_id = ? ORDER BY saved_at DESC, notice_key")
+      .bind(memberId).all();
+    return reply({items:results.map(row => campusItemDetails(JSON.parse(row.data)))});
+  }
+  const input = body.item;
+  if (typeof body.saved !== "boolean" || !input || typeof input !== "object") {
+    return error("즐겨찾기 요청을 확인해 주세요.", 400);
+  }
+  const item = commonItem({...input,deadline_end:input.deadline});
+  if (!item || item.url.length > 2000 || !["교내","교내외"].includes(input.scope)) {
+    return error("교내활동 공고를 확인해 주세요.", 400);
+  }
+  item.scope = input.scope;
+  const key = campusItemDetails(item).key;
+  if (body.saved) {
+    await db.prepare(`INSERT INTO campus_favorites (member_id, notice_key, data, saved_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT (member_id, notice_key) DO UPDATE SET data = excluded.data`)
+      .bind(memberId,key,JSON.stringify(item),now).run();
+  } else {
+    await db.prepare("DELETE FROM campus_favorites WHERE member_id = ? AND notice_key = ?").bind(memberId,key).run();
+  }
+  return reply({});
 }
 
 function rssText(xml, tag) {
@@ -259,8 +244,7 @@ async function readActivityFeed(request, route, db) {
   const params = new URL(request.url).searchParams;
   const school = params.get("school");
   if (route === "campus" && school !== null && school !== "ks") return error("경성대학교 공고만 제공됩니다.", 400);
-  const openOnly = route === "campus" && params.get("open") === "1";
-  const key = openOnly ? "campus-open" : route;
+  const key = route;
   const current = Date.now();
   let snapshot = activityCache.get(key);
   if (!snapshot) {
@@ -273,15 +257,11 @@ async function readActivityFeed(request, route, db) {
   }
   const checked = snapshot && Date.parse(snapshot.checkedAt);
   const present = (data, stale = false) => reply({
-    ...data, stale, items:openOnly ? data.items.filter(currentlyRecruiting) : data.items
+    ...data, stale, items:route === "campus" ? data.items.map(campusItemDetails) : data.items
   });
   if (snapshot && current - checked < freshness) return present(snapshot);
   try {
-    const data = route === "campus" ? await campusFeed(openOnly) : await externalFeed();
-    if (openOnly && data.partial && !data.items.length) {
-      const previous = snapshot?.items.some(currentlyRecruiting) ? snapshot : bundledCampusRecruiting;
-      if (previous.items.some(currentlyRecruiting)) return present(previous, true);
-    }
+    const data = route === "campus" ? await campusFeed() : await externalFeed();
     if (route === "external" && data.partial && !data.items.length) return present(snapshot?.items.length ? snapshot : bundledExternalFeed, true);
     const timestamp = Date.now();
     const latest = {...data,checkedAt:new Date(timestamp).toISOString()};
@@ -297,7 +277,6 @@ async function readActivityFeed(request, route, db) {
   } catch {
     if (snapshot && (route === "external" || current - checked <= day)) return present(snapshot, true);
     if (route === "external") return present(bundledExternalFeed, true);
-    if (openOnly && bundledCampusRecruiting.items.some(currentlyRecruiting)) return present(bundledCampusRecruiting, true);
     return error("학교 공지를 다시 확인하지 못했습니다. 경성대학교 교내소식에서 원문을 확인해 주세요.", 503);
   }
 }
@@ -330,6 +309,9 @@ async function handleApi(request, env, path) {
     .bind(tokenHash, now).first();
   if (!member) return error("다시 로그인해 주세요.", 401);
   if (method === "GET" && path === "/api/activities/external") return readActivityFeed(request, "external", db);
+  if ((method === "GET" || method === "POST") && path === "/api/activities/favorites") {
+    return campusFavorites(db, member.id, method, body, now);
+  }
   if (method === "GET" && path === "/api/activities/campus") return readActivityFeed(request, "campus", db);
   const administrators = adminIds(env);
   const admin = administrators.has(member.id);

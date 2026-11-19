@@ -132,7 +132,10 @@ function openView(view) {
   appViews[view][1].focus({preventScroll:true});
   if (view === "portfolio" && !byId("adminControls").hidden) loadMembers();
   if (view === "resources") loadFeed("external");
-  if (view === "campus") loadFeed("campus");
+  if (view === "campus") {
+    if (!favoritesReady) loadFavorites();
+    loadFeed("campus");
+  }
 }
 
 for (const button of document.querySelectorAll("[data-view]")) {
@@ -140,6 +143,9 @@ for (const button of document.querySelectorAll("[data-view]")) {
 }
 
 const feedState = {external:{},campus:{}};
+let campusFavorites = new Map();
+let favoritesAccount = 0;
+let favoritesReady = false;
 const feedDate = new Intl.DateTimeFormat("ko-KR",{timeZone:"Asia/Seoul",dateStyle:"medium",timeStyle:"short"});
 
 function feedLink(title, href) {
@@ -150,24 +156,94 @@ function feedLink(title, href) {
   return link;
 }
 
+function filterPostedDate(item) {
+  const days = Number(byId("campusDate").value);
+  if (!days) return true;
+  const inKorea = new Date(Date.now() + 9 * 3600000);
+  const today = inKorea.toISOString().slice(0,10);
+  inKorea.setUTCDate(inKorea.getUTCDate() - days + 1);
+  return Boolean(item.date && item.date >= inKorea.toISOString().slice(0,10) && item.date <= today);
+}
+
+function filterCampusCategory(item, category) {
+  if (!category || category === "favorites") return true;
+  if (category === "related") return item.topics.length > 0;
+  if (category.startsWith("topic:")) return item.topics.includes(category.slice(6));
+  return item.category === category.slice(5);
+}
+
+function favoriteStatus(message) {
+  const status = byId("favoriteStatus");
+  status.textContent = message;
+  status.hidden = !message;
+}
+
+async function loadFavorites() {
+  const account = favoritesAccount;
+  try {
+    const {items} = await api("activities/favorites");
+    if (account !== favoritesAccount) return;
+    campusFavorites = new Map(items.map(item => [item.key,item]));
+    favoritesReady = true;
+    renderFeed("campus");
+  } catch {
+    if (account === favoritesAccount) favoriteStatus("즐겨찾기를 불러오지 못했습니다. 다시 확인을 눌러 주세요.");
+  }
+}
+
 function renderFeed(kind) {
   const {data} = feedState[kind];
-  if (!data) return;
   const external = kind === "external";
-  const query = byId(kind + "Query").value.trim().toLowerCase();
   const category = byId(external ? "externalTopic" : "campusCategory").value;
-  const items = data.items.filter(item => item.title.toLowerCase().includes(query) &&
-    (!category || (external ? item.topics.includes(category) : item.category === category)));
+  const favorites = !external && category === "favorites";
+  if (!data && !favorites) return;
+  const query = byId(kind + "Query").value.trim().toLowerCase();
+  const available = favorites ? [...campusFavorites.values()] : data.items;
+  const items = available.filter(item => item.title.toLowerCase().includes(query) &&
+    (external ? !category || item.topics.includes(category) : filterCampusCategory(item,category) && filterPostedDate(item)));
   byId(kind + "Items").replaceChildren(...items.map(item => {
     const row = element("li", undefined, "feed-item");
-    const meta = [external ? item.topics.join(" · ") : item.scope, item.category, item.source, item.date && "게시 " + item.date, item.deadline && "마감 " + item.deadline, item.previousDates && "이전 원문 확인"];
-    row.append(feedLink(item.title, item.url), element("p",meta.filter(Boolean).join(" / "),"sub"));
+    const heading = element("div", undefined, "feed-item-heading");
+    heading.append(feedLink(item.title, item.url));
+    if (!external) {
+      const saved = campusFavorites.has(item.key);
+      const button = element("button", saved ? "★ 저장됨" : "☆ 즐겨찾기", "light favorite-button");
+      button.type = "button";
+      button.disabled = !favoritesReady;
+      button.setAttribute("aria-label",item.title + " 즐겨찾기");
+      button.setAttribute("aria-pressed",String(saved));
+      button.addEventListener("click", async () => {
+        const account = favoritesAccount;
+        button.disabled = true;
+        favoriteStatus("");
+        try {
+          await api("activities/favorites","POST",{item,saved:!saved});
+          if (account !== favoritesAccount) return;
+          if (saved) campusFavorites.delete(item.key);
+          else campusFavorites.set(item.key,item);
+          renderFeed("campus");
+          const refreshed = [...byId("campusItems").querySelectorAll("button")].find(node => node.getAttribute("aria-label") === button.getAttribute("aria-label"));
+          (refreshed || byId("campusCategory")).focus();
+        } catch {
+          if (account === favoritesAccount) favoriteStatus("즐겨찾기를 변경하지 못했습니다. 다시 시도해 주세요.");
+        } finally {
+          button.disabled = false;
+        }
+      });
+      heading.append(button);
+    }
+    const meta = [external ? item.topics.join(" · ") : item.scope, item.category,
+      !external && item.topics.join(" · "), item.source, item.date && "게시 " + item.date, item.deadline && "마감 " + item.deadline];
+    row.append(heading,element("p",meta.filter(Boolean).join(" / "),"sub"));
     return row;
   }));
-  const details = data.stale ? "이전 수집 자료" : data.partial ? (kind === "campus" && byId("campusOpenOnly").checked ? "일부 공고의 모집 기간을 확인하지 못했습니다." : "일부 출처의 최신 자료를 확인하지 못했습니다.") : "";
+  const details = data?.stale ? "이전 수집 자료" : data?.partial ? "일부 출처의 최신 자료를 확인하지 못했습니다." : "";
   byId(kind + "Status").textContent = [
-    "확인 " + feedDate.format(new Date(data.checkedAt)), details,
-    items.length ? items.length + "건" : kind === "campus" && byId("campusOpenOnly").checked ? "모집 중으로 확인된 공고가 없습니다." : "조건에 맞는 공고가 없습니다."
+    !favorites && data?.checkedAt && "확인 " + feedDate.format(new Date(data.checkedAt)),
+    !favorites && details,
+    items.length ? items.length + "건" : favorites ?
+      (!favoritesReady ? "즐겨찾기를 확인 중입니다." : campusFavorites.size ? "조건에 맞는 즐겨찾기가 없습니다." : "저장한 즐겨찾기가 없습니다.") :
+      "조건에 맞는 공고가 없습니다."
   ].filter(Boolean).join(" · ");
 }
 
@@ -175,8 +251,8 @@ function updateCampusSources(data) {
   const select = byId("campusCategory");
   const last = select.value;
   const categories = [...new Set(data.items.map(item => item.category).filter(Boolean))].sort();
-  select.replaceChildren(new Option("전체 분류",""),...categories.map(name => new Option(name,name)));
-  if (categories.includes(last)) select.value = last;
+  byId("campusNoticeCategories").replaceChildren(...categories.map(name => new Option(name,"type:" + name)));
+  if ([...select.options].some(option => option.value === last)) select.value = last;
   byId("campusSources").replaceChildren(...data.sources.map(source => {
     const row = element("li");
     row.append(source.url ? feedLink(source.name,source.url) : element("span",source.name));
@@ -189,18 +265,12 @@ function updateCampusSources(data) {
 async function loadFeed(kind) {
   const state = feedState[kind];
   const campus = kind === "campus";
-  const openOnly = campus && byId("campusOpenOnly").checked;
   state.controller?.abort();
   const controller = new AbortController();
   state.controller = controller;
-  if (state.openOnly !== openOnly) {
-    state.openOnly = openOnly;
-    state.data = null;
-    byId(kind + "Items").replaceChildren();
-  }
-  byId(kind + "Status").textContent = openOnly ? "원문에서 모집 기간을 확인 중입니다." : "공고를 확인 중입니다.";
+  if (!campus || byId("campusCategory").value !== "favorites") byId(kind + "Status").textContent = "공고를 확인 중입니다.";
   try {
-    const response = await fetch("/api/activities/" + kind + (openOnly ? "?open=1" : ""), {signal:controller.signal});
+    const response = await fetch("/api/activities/" + kind, {signal:controller.signal});
     const data = await response.json();
     if (!response.ok) throw new Error(data.error);
     if (controller.signal.aborted) return;
@@ -209,6 +279,7 @@ async function loadFeed(kind) {
     renderFeed(kind);
   } catch (error) {
     if (controller.signal.aborted) return;
+    if (campus && byId("campusCategory").value === "favorites") { renderFeed("campus"); return; }
     byId(kind + "Status").textContent = state.data ? "다시 확인하지 못했습니다. 마지막으로 불러온 공고를 표시합니다." :
       (campus ? "학교 공지를 다시 확인하지 못했습니다. 아래 경성대학교 교내소식에서 원문을 확인해 주세요." : "대외활동을 불러오지 못했습니다. 위의 대외활동 사이트에서 원문을 확인해 주세요.");
   }
@@ -216,11 +287,14 @@ async function loadFeed(kind) {
 
 byId("externalTopic").addEventListener("change", () => renderFeed("external"));
 byId("externalQuery").addEventListener("input", () => renderFeed("external"));
-byId("campusOpenOnly").addEventListener("change", () => loadFeed("campus"));
+byId("campusDate").addEventListener("change", () => renderFeed("campus"));
 byId("campusCategory").addEventListener("change", () => renderFeed("campus"));
 byId("campusQuery").addEventListener("input", () => renderFeed("campus"));
 byId("refreshExternal").addEventListener("click", () => loadFeed("external"));
-byId("refreshCampus").addEventListener("click", () => loadFeed("campus"));
+byId("refreshCampus").addEventListener("click", () => {
+  if (!favoritesReady) loadFavorites();
+  loadFeed("campus");
+});
 setInterval(() => {
   if (!activeMember || document.hidden) return;
   if (!byId("resourcesView").hidden) loadFeed("external");
@@ -330,6 +404,13 @@ byId("inviteForm").addEventListener("submit", async event => {
 
 function showLogin() {
   activeMember = null;
+  favoritesAccount++;
+  favoritesReady = false;
+  campusFavorites.clear();
+  favoriteStatus("");
+  byId("campusCategory").value = "";
+  byId("campusDate").value = "";
+  byId("campusQuery").value = "";
   for (const [kind, state] of Object.entries(feedState)) {
     state.controller?.abort();
     state.data = null;

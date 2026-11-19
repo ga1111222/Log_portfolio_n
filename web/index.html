@@ -27,7 +27,7 @@ main{max-width:1180px;margin:28px auto;padding:0 20px}.hero,.toolbar{display:fle
 @media(max-width:800px){.resource-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.hub{margin-top:26px}.resource-grid,.hub-grid{grid-template-columns:1fr}.hub-card{min-height:100px;padding:18px}}
 .feed-panel{margin-top:28px}.feed-panel h2{margin-bottom:4px}.feed-tools{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin:16px 0}.feed-tools .field{flex:1 1 155px;max-width:330px}
-.feed-check{display:flex;align-items:center;gap:7px;min-height:38px;font-size:14px;font-weight:700;color:var(--label)}.feed-check input{width:auto;accent-color:var(--blue)}
+.feed-item-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px}.favorite-button{flex:none;padding:7px 10px;font-size:13px}.favorite-button[aria-pressed="true"]{color:var(--link);background:var(--sky)}
 .feed-list{list-style:none;margin:12px 0 0;padding:0}.feed-item{display:grid;gap:7px;padding:15px 0;border-top:1px solid var(--line)}.feed-item a{color:var(--navy);font-weight:800;text-underline-offset:3px;overflow-wrap:anywhere}.feed-item .sub{margin:0}.feed-sources{margin-top:12px}.feed-sources a{color:var(--link)}.feed-sources li{margin:5px 0}.feed-status{margin:8px 0 0}
 @media(max-width:680px){.hub-grid{grid-template-columns:1fr}.feed-tools .field{max-width:none}}
 .theme-select{width:auto;min-width:0;padding:8px;font-size:13px;background:var(--surface);color:var(--ink)}
@@ -117,13 +117,18 @@ main{max-width:1180px;margin:28px auto;padding:0 20px}.hero,.toolbar{display:fle
    <h1 id="campusHeading" class="view-heading" tabindex="-1">교내활동</h1>
    <section class="panel feed-panel" aria-labelledby="campusFeedHeading">
     <h2 id="campusFeedHeading">경성대학교 프로그램 · 모집 공고</h2>
-    <p class="sub">모여봄이 모은 경성대학교 공지를 불러옵니다. 교내외 혼합 게시판은 ‘교내외’로 표시합니다. 모집 중 필터는 신청 기간을 확인할 수 있는 공고만 보여줍니다.</p>
+    <p class="sub">모여봄이 모은 경성대학교 공지를 불러옵니다. 공고를 게시일과 분야로 찾아보세요. 분야는 공고 제목을 기준으로 분류합니다.</p>
     <div class="feed-tools">
-     <label class="field">분류<select id="campusCategory"><option value="">전체 분류</option></select></label>
+     <label class="field">분류<select id="campusCategory">
+      <option value="">전체 분류</option><option value="favorites">나의 즐겨찾기</option><option value="related">물류·무역·유통·해운·항만 전체</option>
+      <optgroup label="관련 분야"><option value="topic:물류">물류</option><option value="topic:유통">유통</option><option value="topic:무역">무역</option><option value="topic:해운">해운</option><option value="topic:항만">항만</option></optgroup>
+      <optgroup id="campusNoticeCategories" label="공고 유형"></optgroup>
+     </select></label>
      <label class="field">제목 검색<input id="campusQuery" type="search" placeholder="비교과, 특강, 서포터즈 등"></label>
-     <label class="feed-check"><input type="checkbox" id="campusOpenOnly">모집 중만 보기</label>
+     <label class="field">게시일<select id="campusDate"><option value="">전체 기간</option><option value="1">오늘</option><option value="7">최근 7일</option><option value="30">최근 30일</option><option value="90">최근 90일</option></select></label>
      <button id="refreshCampus" type="button" class="light">다시 확인</button>
     </div>
+    <p id="favoriteStatus" class="status" role="status" hidden></p>
     <p id="campusStatus" class="sub feed-status" role="status"></p>
     <ul id="campusItems" class="feed-list"></ul>
     <details class="feed-sources"><summary>원본 게시판</summary><ul id="campusSources" class="sub"></ul></details>
