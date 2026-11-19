@@ -114,7 +114,8 @@ function loadPortfolio({name, profile, version}) {
 const appViews = {
   hub: [byId("hubView"), byId("hubHeading")],
   portfolio: [byId("portfolioView"), byId("portfolioHeading")],
-  resources: [byId("resourcesView"), byId("resourcesHeading")]
+  resources: [byId("resourcesView"), byId("resourcesHeading")],
+  campus: [byId("campusView"), byId("campusHeading")]
 };
 
 function openView(view) {
@@ -123,11 +124,105 @@ function openView(view) {
   window.scrollTo(0, 0);
   appViews[view][1].focus({preventScroll:true});
   if (view === "portfolio" && !byId("adminControls").hidden) loadMembers();
+  if (view === "resources") loadFeed("external");
+  if (view === "campus") loadFeed("campus");
 }
 
 for (const button of document.querySelectorAll("[data-view]")) {
   button.addEventListener("click", () => openView(button.dataset.view));
 }
+
+const feedState = {external:{},campus:{}};
+const feedDate = new Intl.DateTimeFormat("ko-KR",{timeZone:"Asia/Seoul",dateStyle:"medium",timeStyle:"short"});
+
+function feedLink(title, href) {
+  const link = element("a", title);
+  link.href = href;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  return link;
+}
+
+function renderFeed(kind) {
+  const {data} = feedState[kind];
+  if (!data) return;
+  const external = kind === "external";
+  const query = byId(kind + "Query").value.trim().toLowerCase();
+  const category = byId(external ? "externalTopic" : "campusCategory").value;
+  const items = data.items.filter(item => item.title.toLowerCase().includes(query) &&
+    (!category || (external ? item.topics.includes(category) : item.category === category)));
+  byId(kind + "Items").replaceChildren(...items.map(item => {
+    const row = element("li", undefined, "feed-item");
+    const meta = [external ? item.topics.join(" · ") : item.scope, item.category, item.source, item.date && "게시 " + item.date, item.deadline && "마감 " + item.deadline];
+    row.append(feedLink(item.title, item.url), element("p",meta.filter(Boolean).join(" / "),"sub"));
+    return row;
+  }));
+  const details = data.stale ? "이전 수집 자료" : data.partial ? "일부 출처의 최신 자료를 확인하지 못했습니다." : "";
+  byId(kind + "Status").textContent = [
+    "확인 " + feedDate.format(new Date(data.checkedAt)), details,
+    items.length ? items.length + "건" : "조건에 맞는 공고가 없습니다."
+  ].filter(Boolean).join(" · ");
+}
+
+function updateCampusSources(data) {
+  const select = byId("campusCategory");
+  const last = select.value;
+  const categories = [...new Set(data.items.map(item => item.category).filter(Boolean))].sort();
+  select.replaceChildren(new Option("전체 분류",""),...categories.map(name => new Option(name,name)));
+  if (categories.includes(last)) select.value = last;
+  byId("campusSources").replaceChildren(...data.sources.map(source => {
+    const row = element("li");
+    row.append(source.url ? feedLink(source.name,source.url) : element("span",source.name));
+    const status = source.state === "live" ? "원본 확인" : source.state === "provided" ? "제공 자료" : "최신 확인 안 됨";
+    row.append(" · " + status + (source.checkedAt ? " · " + feedDate.format(new Date(source.checkedAt)) : ""));
+    return row;
+  }));
+}
+
+async function loadFeed(kind) {
+  const state = feedState[kind];
+  const campus = kind === "campus";
+  const school = campus ? byId("campusSchool").value : "";
+  state.controller?.abort();
+  const controller = new AbortController();
+  state.controller = controller;
+  if (state.school !== school) {
+    state.school = school;
+    state.data = null;
+    byId(kind + "Items").replaceChildren();
+    if (campus) {
+      byId("campusCategory").replaceChildren(new Option("전체 분류",""));
+      byId("campusSources").replaceChildren();
+    }
+  }
+  byId(kind + "Status").textContent = "공고를 확인 중입니다.";
+  try {
+    const response = await fetch("/api/activities/" + kind + (school ? "?school=" + encodeURIComponent(school) : ""), {signal:controller.signal});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error);
+    if (controller.signal.aborted) return;
+    state.data = data;
+    if (campus) updateCampusSources(data);
+    renderFeed(kind);
+  } catch (error) {
+    if (controller.signal.aborted) return;
+    byId(kind + "Status").textContent = state.data ? "다시 확인하지 못했습니다. 마지막으로 불러온 공고를 표시합니다." :
+      (error.message || "공고를 불러오지 못했습니다.");
+  }
+}
+
+byId("externalTopic").addEventListener("change", () => renderFeed("external"));
+byId("externalQuery").addEventListener("input", () => renderFeed("external"));
+byId("campusCategory").addEventListener("change", () => renderFeed("campus"));
+byId("campusQuery").addEventListener("input", () => renderFeed("campus"));
+byId("campusSchool").addEventListener("change", () => loadFeed("campus"));
+byId("refreshExternal").addEventListener("click", () => loadFeed("external"));
+byId("refreshCampus").addEventListener("click", () => loadFeed("campus"));
+setInterval(() => {
+  if (!activeMember || document.hidden) return;
+  if (!byId("resourcesView").hidden) loadFeed("external");
+  if (!byId("campusView").hidden) loadFeed("campus");
+}, 180000);
 
 function showProfile(account) {
   editingMemberId = "";
@@ -232,6 +327,13 @@ byId("inviteForm").addEventListener("submit", async event => {
 
 function showLogin() {
   activeMember = null;
+  for (const [kind, state] of Object.entries(feedState)) {
+    state.controller?.abort();
+    state.data = null;
+    byId(kind + "Items").replaceChildren();
+    byId(kind + "Status").textContent = "";
+  }
+  byId("campusSources").replaceChildren();
   adminView++;
   portfolioRequest++;
   byId("memberRows").replaceChildren();

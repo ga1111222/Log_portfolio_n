@@ -98,6 +98,127 @@ async function authenticate(db, request, action, body, now) {
   return createSession(db, member, now);
 }
 
+const campusSchools = new Set(["ks", "pknu", "tongmyong"]);
+const sectors = {"물류":/물류|SCM|공급망/i,"무역":/무역|수출입|통상/,"유통":/유통|리테일/,"해운":/해운|선박/,"항만":/항만|항구/};
+const recruitment = /공모전|아이디어 공모|서포터즈|대학생 기자단|해커톤|챌린지|교육생 모집|참가자 모집|인턴십/;
+const freshness = 180000;
+const day = 86400000;
+const activityCache = new Map();
+
+function officialLink(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function dateOnly(value) {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+}
+
+function dateTime(value) {
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? new Date(time).toISOString() : null;
+}
+
+async function remoteFeed(url, format) {
+  const response = await fetch(url, {signal:AbortSignal.timeout(10000)});
+  if (!response.ok) throw new Error("feed_unavailable");
+  return format === "json" ? response.json() : response.text();
+}
+
+async function moyeobom(school) {
+  const data = await remoteFeed("https://moyeobom-campus.gayoungk1.chatgpt.site/api/activities?school=" + school, "json");
+  if (!Array.isArray(data.items) || !Array.isArray(data.sources)) throw new Error("feed_invalid");
+  return data;
+}
+
+function commonItem(item) {
+  const url = officialLink(item.url);
+  const title = normalized(item.title).slice(0, 250);
+  if (!url || !title) return null;
+  return {url,title,date:dateOnly(item.date),deadline:dateOnly(item.deadline_end),
+    category:normalized(item.category).slice(0, 60),source:normalized(item.source).slice(0, 150)};
+}
+
+async function campusFeed(school) {
+  const data = await moyeobom(school);
+  const sources = data.sources.filter(source => source.scope !== "교외");
+  const items = data.items.filter(item => item.scope === "교내" || item.scope === "교내외").map(item => {
+    const entry = commonItem(item);
+    return entry && {...entry,scope:item.scope};
+  }).filter(Boolean);
+  return {items,partial:!sources.length || sources.some(source => !["live","provided"].includes(source.state)),
+    sources:sources.map(source => ({name:normalized(source.name),url:officialLink(source.url),
+      checkedAt:dateTime(source.checked_at),state:source.state}))};
+}
+
+function rssText(xml, tag) {
+  const value = xml.match(new RegExp("<" + tag + "(?:\\s[^>]*)?>([\\s\\S]*?)</" + tag + ">", "i"))?.[1] || "";
+  return value.replace(/^<!\[CDATA\[([\s\S]*)\]\]>$/, "$1")
+    .replace(/&(amp|lt|gt|quot|apos|#39);/g, (_, key) => ({amp:"&",lt:"<",gt:">",quot:'"',apos:"'","#39":"'"}[key])).trim();
+}
+
+async function industryNews() {
+  const url = new URL("https://news.google.com/rss/search");
+  url.search = new URLSearchParams({q:"(물류 OR 무역 OR 유통 OR 해운 OR 항만) (공모전 OR 서포터즈 OR 대학생 OR 해커톤) when:60d",hl:"ko",gl:"KR",ceid:"KR:ko"});
+  const xml = await remoteFeed(url, "text");
+  if (!/<rss[\s>]/i.test(xml)) throw new Error("feed_invalid");
+  return Array.from(xml.matchAll(/<item>([\s\S]*?)<\/item>/gi), ([, item]) => {
+    const source = rssText(item, "source");
+    const title = rssText(item, "title");
+    const suffix = " - " + source;
+    const published = dateTime(rssText(item, "pubDate"));
+    if (!published || Date.now() - Date.parse(published) > 60 * day) return null;
+    return commonItem({url:rssText(item, "link"),title:source && title.endsWith(suffix) ? title.slice(0, -suffix.length) : title,
+      date:published.slice(0,10),category:"모집 관련 보도",source});
+  }).filter(Boolean);
+}
+
+async function externalFeed() {
+  const results = await Promise.allSettled([
+    moyeobom("ks").then(data => data.items.filter(item => item.scope === "교외").map(commonItem).filter(Boolean)),
+    industryNews()
+  ]);
+  if (results.every(result => result.status === "rejected")) throw new Error("feed_unavailable");
+  const titles = new Set();
+  const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0,10);
+  const items = results.flatMap(result => result.status === "fulfilled" ? result.value : []).flatMap(item => {
+    const topics = Object.entries(sectors).filter(([, pattern]) => pattern.test(item.title)).map(([name]) => name);
+    if (!topics.length || !recruitment.test(item.title) || (item.deadline && item.deadline < today)) return [];
+    if (/성료|시상식|수상작|최종 결과|모집 마감/.test(item.title)) return [];
+    const key = item.title.replace(/[^\p{L}\p{N}]/gu, "").toLowerCase();
+    if (titles.has(key)) return [];
+    titles.add(key);
+    return [{...item,topics}];
+  });
+  items.sort((left, right) => (right.date || "").localeCompare(left.date || ""));
+  return {items:items.slice(0,60),partial:results.some(result => result.status === "rejected")};
+}
+
+async function readActivityFeed(request, route) {
+  const school = new URL(request.url).searchParams.get("school");
+  if (route === "campus" && !campusSchools.has(school)) return error("학교를 선택해 주세요.", 400);
+  const key = route === "campus" ? school : "external";
+  const entry = activityCache.get(key) || {};
+  activityCache.set(key, entry);
+  if (entry.data && Date.now() - entry.at < freshness) return reply({...entry.data,checkedAt:new Date(entry.at).toISOString()});
+  if (!entry.pending) {
+    entry.pending = (route === "campus" ? campusFeed(school) : externalFeed()).then(data => {
+      entry.at = Date.now();
+      entry.data = data;
+      return {...data,checkedAt:new Date(entry.at).toISOString()};
+    }).catch(() => {
+      if (entry.data && Date.now() - entry.at <= day) return {...entry.data,stale:true,checkedAt:new Date(entry.at).toISOString()};
+      return null;
+    }).finally(() => { entry.pending = null; });
+  }
+  const data = await entry.pending;
+  return data ? reply(data) : error("공고 출처에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.", 503);
+}
+
 async function handleApi(request, env, path) {
   const method = request.method;
   if (method !== "GET" && request.headers.get("Origin") !== new URL(request.url).origin) {
@@ -125,6 +246,8 @@ async function handleApi(request, env, path) {
   const member = await db.prepare("SELECT members.id, members.name, members.profile, members.version FROM sessions JOIN members ON members.id = sessions.member_id WHERE token_hash = ? AND expires > ? AND members.active = 1")
     .bind(tokenHash, now).first();
   if (!member) return error("다시 로그인해 주세요.", 401);
+  if (method === "GET" && path === "/api/activities/external") return readActivityFeed(request, "external");
+  if (method === "GET" && path === "/api/activities/campus") return readActivityFeed(request, "campus");
   const administrators = adminIds(env);
   const admin = administrators.has(member.id);
   if (method === "GET" && path === "/api/profile") {

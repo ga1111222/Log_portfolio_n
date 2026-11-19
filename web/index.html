@@ -19,11 +19,14 @@ main{max-width:1180px;margin:28px auto;padding:0 20px}.hero,.toolbar{display:fle
 @media(max-width:520px){.grid{grid-template-columns:1fr}.user span{display:none}.stats{grid-template-columns:1fr 1fr}.panel{padding:16px}.login{margin:30px auto}h1{font-size:26px}}
  .admin-controls{margin:0 0 18px}.admin-controls a{color:#12688d}.admin-controls select{max-width:360px}
 .invite-form{display:flex;flex-wrap:wrap;align-items:end;gap:12px;margin-top:15px}.invite-form .field{flex:1 1 200px}.pagination{margin-top:14px}.tablewrap td:last-child button{margin:3px}
-.hub{max-width:900px;margin:44px auto 0}.hub-intro{margin-bottom:24px}.hub-grid,.resource-grid{display:grid;gap:14px}.hub-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.resource-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.hub{max-width:900px;margin:44px auto 0}.hub-intro{margin-bottom:24px}.hub-grid,.resource-grid{display:grid;gap:14px}.hub-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.resource-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 .hub-card{text-align:left;background:white;color:var(--navy);border:1px solid var(--line);border-radius:16px;padding:26px;min-height:128px;display:flex;flex-direction:column;justify-content:center;gap:9px}.hub-card:hover,.hub-card:focus-visible{border-color:var(--blue);background:var(--sky)}.hub-card strong{font-size:22px}.hub-card .sub{font-weight:400}
 .view-nav{margin-bottom:18px}.resource-group{margin-top:26px}.resource-group h2{margin-bottom:12px}.resource-card h3{margin:0 0 8px;font-size:17px}.resource-card p{margin:0}.resource-card a{color:#12688d;text-underline-offset:3px}.view-heading:focus{outline:none}
 @media(max-width:800px){.resource-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.hub{margin-top:26px}.resource-grid,.hub-grid{grid-template-columns:1fr}.hub-card{min-height:100px;padding:18px}}
+.feed-panel{margin-top:28px}.feed-panel h2{margin-bottom:4px}.feed-tools{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin:16px 0}.feed-tools .field{flex:1 1 155px;max-width:330px}
+.feed-list{list-style:none;margin:12px 0 0;padding:0}.feed-item{display:grid;gap:7px;padding:15px 0;border-top:1px solid var(--line)}.feed-item a{color:var(--navy);font-weight:800;text-underline-offset:3px;overflow-wrap:anywhere}.feed-item .sub{margin:0}.feed-sources{margin-top:12px}.feed-sources a{color:#12688d}.feed-sources li{margin:5px 0}.feed-status{margin:8px 0 0}
+@media(max-width:680px){.hub-grid{grid-template-columns:1fr}.feed-tools .field{max-width:none}}
 @page{size:A4;margin:16mm}
 @media print{
  header,footer,.hero,.view-nav,.admin-controls,.toolbar,.stats,#profileForm,#saveStatus{display:none!important}
@@ -69,6 +72,7 @@ main{max-width:1180px;margin:28px auto;padding:0 20px}.hero,.toolbar{display:fle
    <div class="hub-grid">
     <button type="button" class="panel hub-card" data-view="portfolio"><strong>포트폴리오</strong><span class="sub">경력과 활동을 기록하고 PDF로 저장하세요.</span></button>
     <button type="button" class="panel hub-card" data-view="resources"><strong>사이트 정리</strong><span class="sub">대외활동·공모전을 찾고 희망 직무를 탐색하세요.</span></button>
+    <button type="button" class="panel hub-card" data-view="campus"><strong>교내활동</strong><span class="sub">학교별 비교과 프로그램과 모집 공고를 확인하세요.</span></button>
    </div>
   </section>
   <section id="resourcesView" aria-labelledby="resourcesHeading" hidden>
@@ -88,7 +92,37 @@ main{max-width:1180px;margin:28px auto;padding:0 20px}.hero,.toolbar{display:fle
      <article class="panel resource-card"><h3><a href="https://www.work24.go.kr/" target="_blank" rel="noopener noreferrer">고용24</a></h3><p class="sub">채용정보에서 ‘물류관리’나 ‘포워딩’을 검색해 주요 업무와 자격 요건을 비교하세요. 직업심리검사도 활용할 수 있습니다.</p></article>
      <article class="panel resource-card"><h3><a href="https://www.wage.go.kr/" target="_blank" rel="noopener noreferrer">임금포털 · 임금직무정보시스템</a></h3><p class="sub">임금정보에서 관심 직종의 경력이나 사업체 규모 조건을 바꿔 보며 임금 수준을 비교하세요.</p></article>
      <article class="panel resource-card"><h3><a href="https://www.career.go.kr/" target="_blank" rel="noopener noreferrer">커리어넷</a></h3><p class="sub">직업백과에서 관심 직업을 검색해 하는 일, 필요한 역량, 관련 학과를 확인하세요.</p></article>
+     <article class="panel resource-card"><h3><a href="https://www.ncs.go.kr/" target="_blank" rel="noopener noreferrer">NCS 국가직무능력표준</a></h3><p class="sub">NCS 검색에서 ‘물류관리’나 ‘수출입관리’를 찾아 필요한 능력단위와 직무 역량을 확인하세요.</p></article>
     </div>
+   </section>
+   <section class="panel feed-panel" aria-labelledby="externalHeading">
+    <h2 id="externalHeading">물류·무역·유통·해운·항만 대외활동</h2>
+    <p class="sub">공개 공고와 모집 관련 보도를 자동으로 모읍니다. 마감일과 접수 여부는 원문에서 확인하세요.</p>
+    <div class="feed-tools">
+     <label class="field">분야<select id="externalTopic"><option value="">전체 분야</option><option>물류</option><option>무역</option><option>유통</option><option>해운</option><option>항만</option></select></label>
+     <label class="field">제목 검색<input id="externalQuery" type="search" placeholder="공모전, 서포터즈 등"></label>
+     <button id="refreshExternal" type="button" class="light">다시 확인</button>
+    </div>
+    <p id="externalStatus" class="sub feed-status" role="status"></p>
+    <ul id="externalItems" class="feed-list"></ul>
+   </section>
+  </section>
+  <section id="campusView" aria-labelledby="campusHeading" hidden>
+   <nav class="view-nav" aria-label="페이지 이동"><button type="button" class="light" data-view="hub">처음으로</button></nav>
+   <h1 id="campusHeading" class="view-heading" tabindex="-1">교내활동</h1>
+   <section class="panel feed-panel" aria-labelledby="campusFeedHeading">
+    <h2 id="campusFeedHeading">학교별 프로그램 · 모집 공고</h2>
+    <p class="sub">모여봄이 모은 학교 공지를 불러옵니다. 교내외 혼합 게시판의 공고는 ‘교내외’로 표시합니다.</p>
+    <div class="feed-tools">
+     <label class="field">학교<select id="campusSchool"><option value="ks">경성대학교</option><option value="pknu">국립부경대학교</option><option value="tongmyong">동명대학교</option></select></label>
+     <label class="field">분류<select id="campusCategory"><option value="">전체 분류</option></select></label>
+     <label class="field">제목 검색<input id="campusQuery" type="search" placeholder="비교과, 특강, 서포터즈 등"></label>
+     <button id="refreshCampus" type="button" class="light">다시 확인</button>
+    </div>
+    <p id="campusStatus" class="sub feed-status" role="status"></p>
+    <ul id="campusItems" class="feed-list"></ul>
+    <details class="feed-sources"><summary>원본 게시판</summary><ul id="campusSources" class="sub"></ul></details>
+    <p class="sub"><a href="https://moyeobom-campus.gayoungk1.chatgpt.site/" target="_blank" rel="noopener noreferrer">모여봄에서 전체 활동 보기</a></p>
    </section>
   </section>
   <section id="portfolioView" aria-labelledby="portfolioHeading" hidden>
