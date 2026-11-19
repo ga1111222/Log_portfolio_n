@@ -111,6 +111,24 @@ function loadPortfolio({name, profile, version}) {
   updateStats();
 }
 
+const appViews = {
+  hub: [byId("hubView"), byId("hubHeading")],
+  portfolio: [byId("portfolioView"), byId("portfolioHeading")],
+  resources: [byId("resourcesView"), byId("resourcesHeading")]
+};
+
+function openView(view) {
+  if (!activeMember) return;
+  for (const [name, [section]] of Object.entries(appViews)) section.hidden = name !== view;
+  window.scrollTo(0, 0);
+  appViews[view][1].focus({preventScroll:true});
+  if (view === "portfolio" && !byId("adminControls").hidden) loadMembers();
+}
+
+for (const button of document.querySelectorAll("[data-view]")) {
+  button.addEventListener("click", () => openView(button.dataset.view));
+}
+
 function showProfile(account) {
   editingMemberId = "";
   page = 0;
@@ -121,7 +139,7 @@ function showProfile(account) {
   byId("appView").hidden = false;
   byId("logoutBtn").hidden = false;
   loadPortfolio(account);
-  if (account.admin) loadMembers();
+  openView("hub");
 }
 
 function adminStatus(message) {
@@ -329,7 +347,7 @@ function preparePrint() {
   }
 }
 window.addEventListener("beforeprint", () => {
-  if (activeMember) preparePrint();
+  if (activeMember && !byId("portfolioView").hidden) preparePrint();
 });
 byId("print").addEventListener("click", () => {
   if (!activeMember) return;

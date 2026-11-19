@@ -19,9 +19,14 @@ main{max-width:1180px;margin:28px auto;padding:0 20px}.hero,.toolbar{display:fle
 @media(max-width:520px){.grid{grid-template-columns:1fr}.user span{display:none}.stats{grid-template-columns:1fr 1fr}.panel{padding:16px}.login{margin:30px auto}h1{font-size:26px}}
  .admin-controls{margin:0 0 18px}.admin-controls a{color:#12688d}.admin-controls select{max-width:360px}
 .invite-form{display:flex;flex-wrap:wrap;align-items:end;gap:12px;margin-top:15px}.invite-form .field{flex:1 1 200px}.pagination{margin-top:14px}.tablewrap td:last-child button{margin:3px}
+.hub{max-width:900px;margin:44px auto 0}.hub-intro{margin-bottom:24px}.hub-grid,.resource-grid{display:grid;gap:14px}.hub-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.resource-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.hub-card{text-align:left;background:white;color:var(--navy);border:1px solid var(--line);border-radius:16px;padding:26px;min-height:128px;display:flex;flex-direction:column;justify-content:center;gap:9px}.hub-card:hover,.hub-card:focus-visible{border-color:var(--blue);background:var(--sky)}.hub-card strong{font-size:22px}.hub-card .sub{font-weight:400}
+.view-nav{margin-bottom:18px}.resource-group{margin-top:26px}.resource-group h2{margin-bottom:12px}.resource-card h3{margin:0 0 8px;font-size:17px}.resource-card p{margin:0}.resource-card a{color:#12688d;text-underline-offset:3px}.view-heading:focus{outline:none}
+@media(max-width:800px){.resource-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){.hub{margin-top:26px}.resource-grid,.hub-grid{grid-template-columns:1fr}.hub-card{min-height:100px;padding:18px}}
 @page{size:A4;margin:16mm}
 @media print{
- header,footer,.hero,.admin-controls,.toolbar,.stats,#profileForm,#saveStatus{display:none!important}
+ header,footer,.hero,.view-nav,.admin-controls,.toolbar,.stats,#profileForm,#saveStatus{display:none!important}
  body{background:white;color:black;font-size:11pt}
  main{margin:0;padding:0}.layout{display:block}.panel{border:0;box-shadow:none;padding:0}
  .print-profile{display:block}.print-profile h1{font-size:22pt;margin:0 0 12pt}
@@ -59,7 +64,36 @@ main{max-width:1180px;margin:28px auto;padding:0 20px}.hero,.toolbar{display:fle
   <p><button type="button" class="light" id="switchAuth">회원가입</button></p>
  </section>
  <div id="appView" hidden>
-  <div class="hero"><div><div class="eyebrow">CAREER ARCHIVE</div><h1>나의 물류 커리어를 기록하다.</h1><div class="sub">로그온 구성원의 경험과 성장을 한곳에 모으는 개인 포트폴리오</div></div><span id="rolePill" class="pill"></span></div>
+  <section id="hubView" class="hub" aria-labelledby="hubHeading">
+   <div class="hub-intro"><h1 id="hubHeading" class="view-heading" tabindex="-1">무엇을 할까요?</h1></div>
+   <div class="hub-grid">
+    <button type="button" class="panel hub-card" data-view="portfolio"><strong>포트폴리오</strong><span class="sub">경력과 활동을 기록하고 PDF로 저장하세요.</span></button>
+    <button type="button" class="panel hub-card" data-view="resources"><strong>사이트 정리</strong><span class="sub">대외활동·공모전을 찾고 희망 직무를 탐색하세요.</span></button>
+   </div>
+  </section>
+  <section id="resourcesView" aria-labelledby="resourcesHeading" hidden>
+   <nav class="view-nav" aria-label="페이지 이동"><button type="button" class="light" data-view="hub">처음으로</button></nav>
+   <h1 id="resourcesHeading" class="view-heading" tabindex="-1">사이트 정리</h1>
+   <section class="resource-group" aria-labelledby="activitiesHeading">
+    <h2 id="activitiesHeading">대외활동 · 공모전</h2>
+    <div class="resource-grid">
+     <article class="panel resource-card"><h3><a href="https://linkareer.com/" target="_blank" rel="noopener noreferrer">링커리어</a></h3><p class="sub">대외활동·공모전에서 ‘물류’, ‘무역’, ‘SCM’으로 검색하고 지원 대상과 마감일을 확인하세요.</p></article>
+     <article class="panel resource-card"><h3><a href="https://www.all-con.co.kr/" target="_blank" rel="noopener noreferrer">올콘</a></h3><p class="sub">공모전이나 대외활동 분야를 선택한 뒤 참가 자격, 팀 구성, 제출 형식을 공고에서 확인하세요.</p></article>
+     <article class="panel resource-card"><h3><a href="https://www.wevity.com/" target="_blank" rel="noopener noreferrer">위비티</a></h3><p class="sub">공모전·대외활동 목록을 둘러보고 관심 공고의 접수 일정과 제출물을 비교해 보세요.</p></article>
+    </div>
+   </section>
+   <section class="resource-group" aria-labelledby="jobsHeading">
+    <h2 id="jobsHeading">직무 · 진로 탐색</h2>
+    <div class="resource-grid">
+     <article class="panel resource-card"><h3><a href="https://www.work24.go.kr/" target="_blank" rel="noopener noreferrer">고용24</a></h3><p class="sub">채용정보에서 ‘물류관리’나 ‘포워딩’을 검색해 주요 업무와 자격 요건을 비교하세요. 직업심리검사도 활용할 수 있습니다.</p></article>
+     <article class="panel resource-card"><h3><a href="https://www.wage.go.kr/" target="_blank" rel="noopener noreferrer">임금포털 · 임금직무정보시스템</a></h3><p class="sub">임금정보에서 관심 직종의 경력이나 사업체 규모 조건을 바꿔 보며 임금 수준을 비교하세요.</p></article>
+     <article class="panel resource-card"><h3><a href="https://www.career.go.kr/" target="_blank" rel="noopener noreferrer">커리어넷</a></h3><p class="sub">직업백과에서 관심 직업을 검색해 하는 일, 필요한 역량, 관련 학과를 확인하세요.</p></article>
+    </div>
+   </section>
+  </section>
+  <section id="portfolioView" aria-labelledby="portfolioHeading" hidden>
+   <nav class="view-nav" aria-label="페이지 이동"><button type="button" class="light" data-view="hub">처음으로</button></nav>
+  <div class="hero"><div><div class="eyebrow">CAREER ARCHIVE</div><h1 id="portfolioHeading" class="view-heading" tabindex="-1">나의 물류 커리어를 기록하다.</h1><div class="sub">로그온 구성원의 경험과 성장을 한곳에 모으는 개인 포트폴리오</div></div><span id="rolePill" class="pill"></span></div>
   <div class="admin-controls" id="adminControls" hidden>
    <section class="panel">
     <h2>회원 관리</h2>
@@ -86,6 +120,7 @@ main{max-width:1180px;margin:28px auto;padding:0 20px}.hero,.toolbar{display:fle
     <article id="printProfile" class="print-profile"></article>
    </section>
   </div>
+  </section>
  </div>
 </main>
 <footer>LOG:ON · LOGISTICS PORTFOLIO</footer>
