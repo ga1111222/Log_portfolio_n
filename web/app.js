@@ -160,7 +160,7 @@ function renderFeed(kind) {
   const details = data.stale ? "이전 수집 자료" : data.partial ? "일부 출처의 최신 자료를 확인하지 못했습니다." : "";
   byId(kind + "Status").textContent = [
     "확인 " + feedDate.format(new Date(data.checkedAt)), details,
-    items.length ? items.length + "건" : "조건에 맞는 공고가 없습니다."
+    items.length ? items.length + "건" : kind === "campus" && byId("campusOpenOnly").checked ? "모집 중으로 확인된 공고가 없습니다." : "조건에 맞는 공고가 없습니다."
   ].filter(Boolean).join(" · ");
 }
 
@@ -182,12 +182,18 @@ function updateCampusSources(data) {
 async function loadFeed(kind) {
   const state = feedState[kind];
   const campus = kind === "campus";
+  const openOnly = campus && byId("campusOpenOnly").checked;
   state.controller?.abort();
   const controller = new AbortController();
   state.controller = controller;
-  byId(kind + "Status").textContent = "공고를 확인 중입니다.";
+  if (state.openOnly !== openOnly) {
+    state.openOnly = openOnly;
+    state.data = null;
+    byId(kind + "Items").replaceChildren();
+  }
+  byId(kind + "Status").textContent = openOnly ? "원문에서 모집 기간을 확인 중입니다." : "공고를 확인 중입니다.";
   try {
-    const response = await fetch("/api/activities/" + kind, {signal:controller.signal});
+    const response = await fetch("/api/activities/" + kind + (openOnly ? "?open=1" : ""), {signal:controller.signal});
     const data = await response.json();
     if (!response.ok) throw new Error(data.error);
     if (controller.signal.aborted) return;
@@ -197,12 +203,13 @@ async function loadFeed(kind) {
   } catch (error) {
     if (controller.signal.aborted) return;
     byId(kind + "Status").textContent = state.data ? "다시 확인하지 못했습니다. 마지막으로 불러온 공고를 표시합니다." :
-      (error.message || "공고를 불러오지 못했습니다.");
+      (campus ? "학교 공지를 다시 확인하지 못했습니다. 아래 경성대학교 교내소식에서 원문을 확인해 주세요." : "대외활동을 불러오지 못했습니다. 위의 대외활동 사이트에서 원문을 확인해 주세요.");
   }
 }
 
 byId("externalTopic").addEventListener("change", () => renderFeed("external"));
 byId("externalQuery").addEventListener("input", () => renderFeed("external"));
+byId("campusOpenOnly").addEventListener("change", () => loadFeed("campus"));
 byId("campusCategory").addEventListener("change", () => renderFeed("campus"));
 byId("campusQuery").addEventListener("input", () => renderFeed("campus"));
 byId("refreshExternal").addEventListener("click", () => loadFeed("external"));

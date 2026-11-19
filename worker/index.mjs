@@ -122,8 +122,8 @@ function dateTime(value) {
   return Number.isFinite(time) ? new Date(time).toISOString() : null;
 }
 
-async function remoteFeed(url, format) {
-  const response = await fetch(url, {signal:AbortSignal.timeout(10000)});
+async function remoteFeed(url, format, timeout = 6500) {
+  const response = await fetch(url, {signal:AbortSignal.timeout(timeout)});
   if (!response.ok) throw new Error("feed_unavailable");
   return format === "json" ? response.json() : response.text();
 }
@@ -138,20 +138,59 @@ function commonItem(item) {
   const url = officialLink(item.url);
   const title = normalized(item.title).slice(0, 250);
   if (!url || !title) return null;
-  return {url,title,date:dateOnly(item.date),deadline:dateOnly(item.deadline_end),
+  return {url,title,date:dateOnly(item.date),deadline:dateOnly(item.deadline_end),start:dateOnly(item.deadline_start),
     category:normalized(item.category).slice(0, 60),source:normalized(item.source).slice(0, 150)};
 }
 
-async function campusFeed() {
+async function campusFeed(openOnly) {
   const data = await moyeobom();
   const sources = data.sources.filter(source => source.scope !== "교외");
   const items = data.items.filter(item => item.scope === "교내" || item.scope === "교내외").map(item => {
     const entry = commonItem(item);
     return entry && {...entry,scope:item.scope};
   }).filter(Boolean);
-  return {items,partial:!sources.length || sources.some(source => !["live","provided"].includes(source.state)),
+  if (openOnly) {
+    const candidates = items.filter(item => !item.deadline && new URL(item.url).hostname === "kscms.ks.ac.kr").slice(0, 15);
+    for (let i = 0; i < candidates.length; i += 5) {
+      await Promise.all(candidates.slice(i, i + 5).map(async item => {
+        try {
+          const html = await remoteFeed(item.url, "text", 3000);
+          Object.assign(item, registrationDates(html, item.date));
+        } catch {
+          // Dates from an unavailable notice remain unknown.
+        }
+      }));
+    }
+  }
+  return {items:openOnly ? items.filter(currentlyRecruiting) : items,partial:!sources.length || sources.some(source => !["live","provided"].includes(source.state)),
     sources:sources.map(source => ({name:normalized(source.name),url:officialLink(source.url),
       checkedAt:dateTime(source.checked_at),state:source.state}))};
+}
+
+function koreanToday() {
+  return new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+}
+
+function currentlyRecruiting(item) {
+  const today = koreanToday();
+  return item.deadline && item.deadline >= today &&
+    (item.start ? item.start <= today : item.date && item.date <= today) &&
+    !/모집\s*마감|접수\s*마감|신청\s*마감|모집\s*종료|선정\s*결과/.test(item.title);
+}
+
+function registrationDates(html, posted) {
+  const content = html.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]*>|&nbsp;|&#160;/g, " ").replace(/&sim;|&#126;/g, "~").replace(/\s+/g, " ");
+  const range = content.match(/(?:신청|접수|모집)\s*기간\s*[:：]?\s*(?:(\d{4})\s*[.\-/년]\s*)?(\d{1,2})\s*[.\-/월]\s*(\d{1,2})\s*(?:[.일]\s*)?(?:\([^)]{1,8}\)\s*)?(?:\d{1,2}:\d{2}\s*)?[~～∼–—-]\s*(?:(\d{4})\s*[.\-/년]\s*)?(\d{1,2})\s*[.\-/월]\s*(\d{1,2})/);
+  if (!range) return {};
+  const [, firstYear, firstMonth, firstDay, lastYear, lastMonth, lastDay] = range;
+  const year = firstYear || posted?.slice(0, 4);
+  if (!year) return {};
+  const date = (y,m,d) => [y,m.padStart(2,"0"),d.padStart(2,"0")].join("-");
+  const start = date(year, firstMonth, firstDay);
+  const deadline = date(lastYear || year, lastMonth, lastDay);
+  const valid = value => dateTime(value)?.slice(0,10) === value;
+  return valid(start) && valid(deadline) && start <= deadline ? {start,deadline} : {};
 }
 
 function rssText(xml, tag) {
@@ -197,25 +236,46 @@ async function externalFeed() {
   return {items:items.slice(0,60),partial:results.some(result => result.status === "rejected")};
 }
 
-async function readActivityFeed(request, route) {
-  const school = new URL(request.url).searchParams.get("school");
+async function readActivityFeed(request, route, db) {
+  const params = new URL(request.url).searchParams;
+  const school = params.get("school");
   if (route === "campus" && school !== null && school !== "ks") return error("경성대학교 공고만 제공됩니다.", 400);
-  const key = route;
-  const entry = activityCache.get(key) || {};
-  activityCache.set(key, entry);
-  if (entry.data && Date.now() - entry.at < freshness) return reply({...entry.data,checkedAt:new Date(entry.at).toISOString()});
-  if (!entry.pending) {
-    entry.pending = (route === "campus" ? campusFeed() : externalFeed()).then(data => {
-      entry.at = Date.now();
-      entry.data = data;
-      return {...data,checkedAt:new Date(entry.at).toISOString()};
-    }).catch(() => {
-      if (entry.data && Date.now() - entry.at <= day) return {...entry.data,stale:true,checkedAt:new Date(entry.at).toISOString()};
-      return null;
-    }).finally(() => { entry.pending = null; });
+  const openOnly = route === "campus" && params.get("open") === "1";
+  const key = openOnly ? "campus-open" : route;
+  const current = Date.now();
+  let snapshot = activityCache.get(key);
+  if (!snapshot) {
+    try {
+      const stored = await db.prepare("SELECT checked_at, content FROM activity_snapshots WHERE route = ?").bind(key).first();
+      if (stored) snapshot = {...JSON.parse(stored.content),checkedAt:new Date(stored.checked_at).toISOString()};
+    } catch {
+      // A temporary storage error does not prevent a fresh fetch.
+    }
   }
-  const data = await entry.pending;
-  return data ? reply(data) : error("공고 출처에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.", 503);
+  const checked = snapshot && Date.parse(snapshot.checkedAt);
+  const present = (data, stale = false) => reply({
+    ...data, stale, items:openOnly ? data.items.filter(currentlyRecruiting) : data.items
+  });
+  if (snapshot && current - checked < freshness) return present(snapshot);
+  try {
+    const data = route === "campus" ? await campusFeed(openOnly) : await externalFeed();
+    if (route === "external" && data.partial && !data.items.length) return present(snapshot?.items.length ? snapshot : bundledExternalFeed, true);
+    const timestamp = Date.now();
+    const latest = {...data,checkedAt:new Date(timestamp).toISOString()};
+    activityCache.set(key, latest);
+    try {
+      await db.prepare(`INSERT INTO activity_snapshots (route, checked_at, content) VALUES (?, ?, ?)
+        ON CONFLICT(route) DO UPDATE SET checked_at = excluded.checked_at, content = excluded.content
+        WHERE excluded.checked_at >= activity_snapshots.checked_at`).bind(key,timestamp,JSON.stringify(data)).run();
+    } catch {
+      // The latest results can still be returned to this request.
+    }
+    return present(latest);
+  } catch {
+    if (snapshot && (route === "external" || current - checked <= day)) return present(snapshot, true);
+    if (route === "external") return present(bundledExternalFeed, true);
+    return error("학교 공지를 다시 확인하지 못했습니다. 경성대학교 교내소식에서 원문을 확인해 주세요.", 503);
+  }
 }
 
 async function handleApi(request, env, path) {
@@ -245,8 +305,8 @@ async function handleApi(request, env, path) {
   const member = await db.prepare("SELECT members.id, members.name, members.profile, members.version FROM sessions JOIN members ON members.id = sessions.member_id WHERE token_hash = ? AND expires > ? AND members.active = 1")
     .bind(tokenHash, now).first();
   if (!member) return error("다시 로그인해 주세요.", 401);
-  if (method === "GET" && path === "/api/activities/external") return readActivityFeed(request, "external");
-  if (method === "GET" && path === "/api/activities/campus") return readActivityFeed(request, "campus");
+  if (method === "GET" && path === "/api/activities/external") return readActivityFeed(request, "external", db);
+  if (method === "GET" && path === "/api/activities/campus") return readActivityFeed(request, "campus", db);
   const administrators = adminIds(env);
   const admin = administrators.has(member.id);
   if (method === "GET" && path === "/api/profile") {

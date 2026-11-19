@@ -25,6 +25,7 @@ main{max-width:1180px;margin:28px auto;padding:0 20px}.hero,.toolbar{display:fle
 @media(max-width:800px){.resource-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.hub{margin-top:26px}.resource-grid,.hub-grid{grid-template-columns:1fr}.hub-card{min-height:100px;padding:18px}}
 .feed-panel{margin-top:28px}.feed-panel h2{margin-bottom:4px}.feed-tools{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin:16px 0}.feed-tools .field{flex:1 1 155px;max-width:330px}
+.feed-check{display:flex;align-items:center;gap:7px;min-height:38px;font-size:14px;font-weight:700;color:#425565}.feed-check input{width:auto;accent-color:var(--blue)}
 .feed-list{list-style:none;margin:12px 0 0;padding:0}.feed-item{display:grid;gap:7px;padding:15px 0;border-top:1px solid var(--line)}.feed-item a{color:var(--navy);font-weight:800;text-underline-offset:3px;overflow-wrap:anywhere}.feed-item .sub{margin:0}.feed-sources{margin-top:12px}.feed-sources a{color:#12688d}.feed-sources li{margin:5px 0}.feed-status{margin:8px 0 0}
 @media(max-width:680px){.hub-grid{grid-template-columns:1fr}.feed-tools .field{max-width:none}}
 @page{size:A4;margin:16mm}
@@ -112,10 +113,11 @@ main{max-width:1180px;margin:28px auto;padding:0 20px}.hero,.toolbar{display:fle
    <h1 id="campusHeading" class="view-heading" tabindex="-1">교내활동</h1>
    <section class="panel feed-panel" aria-labelledby="campusFeedHeading">
     <h2 id="campusFeedHeading">경성대학교 프로그램 · 모집 공고</h2>
-    <p class="sub">모여봄이 모은 경성대학교 공지를 불러옵니다. 교내외 혼합 게시판의 공고는 ‘교내외’로 표시합니다.</p>
+    <p class="sub">모여봄이 모은 경성대학교 공지를 불러옵니다. 교내외 혼합 게시판은 ‘교내외’로 표시합니다. 모집 중 필터는 신청 기간을 확인할 수 있는 공고만 보여줍니다.</p>
     <div class="feed-tools">
      <label class="field">분류<select id="campusCategory"><option value="">전체 분류</option></select></label>
      <label class="field">제목 검색<input id="campusQuery" type="search" placeholder="비교과, 특강, 서포터즈 등"></label>
+     <label class="feed-check"><input type="checkbox" id="campusOpenOnly">모집 중만 보기</label>
      <button id="refreshCampus" type="button" class="light">다시 확인</button>
     </div>
     <p id="campusStatus" class="sub feed-status" role="status"></p>
